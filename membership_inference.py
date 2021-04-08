@@ -1,9 +1,11 @@
+import torch
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 
-from dataset import *
+from datasets.dataset import *
 from dp_optim import DPSGD
 from libs.mia.estimators import ShadowModelBundle, AttackModelBundle, prepare_attack_data
+from libs.mia.wrappers import TorchWrapper, DPTorchWrapper
 from models import *
 
 
@@ -79,7 +81,6 @@ def membership_inference_attack(args):
   X_test, y_test = np.moveaxis(test_dataset.data, -1, 1), np.array(test_dataset.targets)
 
   print('Training the victim model')
-
   target_model = get_target_model(args)
   if args.trained_model_path is not None:
     target_model.module_.load_state_dict(torch.load(args.trained_model_path))
@@ -93,6 +94,8 @@ def membership_inference_attack(args):
                      verbose=True,
                      minibatch_size=1
                      )
+    if args.save_model:
+      torch.save(target_model.module_.statde_dict, args.save_model_path)
 
   # Train the shadow models.
   smb = ShadowModelBundle(

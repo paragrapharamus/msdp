@@ -16,6 +16,7 @@ def get_cifar10_dataset():
   test_dataset = datasets.CIFAR10("../data", train=False, transform=transform_test)
   return test_dataset, train_dataset, valid_dataset
 
+
 def load_cifar10(test_kwargs, train_kwargs):
   test_dataset, train_dataset, valid_dataset = get_cifar10_dataset()
   training_dataset_size = len(train_dataset)
@@ -33,4 +34,4 @@ def load_cifar10(test_kwargs, train_kwargs):
   train_loader = DataLoader(train_dataset, **train_kwargs)
   valid_loader = DataLoader(valid_dataset, **valid_kwargs)
   test_loader = DataLoader(test_dataset, **test_kwargs)
-  return test_loader, train_loader, valid_loader
+  return train_loader, valid_loader, test_loader

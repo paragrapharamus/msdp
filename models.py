@@ -1,5 +1,4 @@
-from utils import *
-
+import torch.nn as nn
 
 class Cifar10Net(nn.Module):
   def __init__(self):
