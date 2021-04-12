@@ -1,7 +1,11 @@
 import argparse
 import torch
 from datasets.dataset import *
-from membership_inference import membership_inference_attack
+from torchvision.models import resnet18
+import matplotlib.pyplot as plt
+from torchvision.utils import save_image, make_grid
+from typing import Optional
+from torch.utils.data.dataloader import DataLoader
 
 if torch.cuda.is_available():
   torch.backends.cudnn.deterministic = True
@@ -15,7 +19,7 @@ def _parse_args():
   parser.add_argument(
     "--batch-size",
     type=int,
-    default=64,
+    default=256,
     metavar="N",
     help="input batch size for training (default: 64)",
   )
@@ -31,41 +35,33 @@ def _parse_args():
   parser.add_argument(
     "--test-batch-size",
     type=int,
-    default=100,
+    default=500,
     metavar="N",
     help="input batch size for testing (default: 100)",
   )
   parser.add_argument(
     "--epochs",
     type=int,
-    default=20,
+    default=10,
     metavar="N",
     help="number of epochs to train (default: 20)",
   )
   parser.add_argument(
     "--lr",
     type=float,
-    default=0.15,
+    default=0.02,
     metavar="LR",
-    help="learning rate (default: 0.15)",
+    help="learning rate (default: 0.02)",
   )
-
   parser.add_argument(
-    "--max_norm",
+    "--wd",
+    "--weight-decay",
+    default=5e-4,
     type=float,
-    default=10,
-    metavar="MAX_NORM",
-    help="l2 clipping norm (default: 10.0)",
+    metavar="W",
+    help="SGD weight decay (default: 5e-4)",
+    dest="weight_decay",
   )
-
-  parser.add_argument(
-    "--noise_multiplier",
-    type=float,
-    default=1.1,
-    metavar="NOISE_MULTIPLIER",
-    help="noise_multiplier (default: 1.0)",
-  )
-
   parser.add_argument(
     "--momentum",
     type=float,
@@ -73,7 +69,20 @@ def _parse_args():
     metavar="MOMENTUM",
     help="momentum"
   )
-
+  parser.add_argument(
+    "--max_norm",
+    type=float,
+    default=2,
+    metavar="MAX_NORM",
+    help="l2 clipping norm (default: 1.0)",
+  )
+  parser.add_argument(
+    "--noise_multiplier",
+    type=float,
+    default=0.5,
+    metavar="NOISE_MULTIPLIER",
+    help="noise_multiplier (default: 1.0)",
+  )
   parser.add_argument(
     "--gamma",
     type=float,
@@ -122,9 +131,11 @@ def _parse_args():
   args = parser.parse_args()
   return args
 
+
 from models import Cifar10Net
-from dp_optim import DPSGD
+from dp.dp_optim import DPSGD
 from msdp import MSPDTrainer
+
 
 def train(args):
   use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -135,22 +146,30 @@ def train(args):
     cuda_kwargs = {"num_workers": 1, "pin_memory": True}
     train_kwargs.update(cuda_kwargs)
     test_kwargs.update(cuda_kwargs)
+    print('GPU: ' + str(torch.cuda.get_device_name(0)))
+  else:
+    print('CPU')
 
   dataloaders = load_cifar10(test_kwargs, train_kwargs)
 
   model = Cifar10Net().to(device)
-  optimizer = DPSGD(
-    l2_norm_clip=args.max_norm,
-    noise_multiplier=args.noise_multiplier,
-    minibatch_size=args.batch_size,
-    microbatch_size=args.minibatch_size,
-    params=model.parameters(),
-    lr=args.lr)
 
-  trainer = MSPDTrainer(model, optimizer, dataloaders, ['STAGE_1', 'STAGE_3'], 1, args.batch_size,
-                        args.minibatch_size, device, './model.pth')
+  # optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
+  optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+  trainer = MSPDTrainer(model=model,
+                        optimizer=optimizer,
+                        data_loaders=dataloaders,
+                        stages=['STAGE_1', 'STAGE_3'],
+                        epochs=args.epochs,
+                        batch_size=args.batch_size,
+                        device=device,
+                        max_norm=args.max_norm,
+                        noise_multiplier=args.noise_multiplier,
+                        )
 
   trainer.train_and_test()
+
+
 
 def main():
   args = _parse_args()
