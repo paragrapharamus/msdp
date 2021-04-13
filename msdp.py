@@ -14,22 +14,35 @@ from torch import nn
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 from log import Logger
+from enum import Enum
+
+
+class Stages(Enum):
+  STAGE_1 = 1
+  ''' Input Perturbation '''
+  STAGE_2 = 2
+  ''' Gradient Perturbation  '''
+  STAGE_3 = 3
+  ''' Output (weights) Perturbation '''
 
 
 class MSPDTrainer:
+  """
+  Multistage differentially private trainer
+  """
   STATS_FMT = "[{:>5s}] loss: {:+.4f}, acc: {:.4f}"
 
   def __init__(self, model: nn.Module,
                optimizer: torch.optim,
-               data_loaders: torch.utils.data.DataLoader,
-               stages: List[str],
+               data_loaders: DataLoader,
                epochs: int,
                batch_size: int,
                device: torch.device,
+               stages: List[Stages],
                max_norm: Union[float, List[float]],
                noise_multiplier: float,
-               logger: Optional[Logger] = None
-               ):
+               epsilon: Optional[float],
+               logger: Optional[Logger] = None):
 
     self.model = model
     self.data_loaders = data_loaders
@@ -45,6 +58,7 @@ class MSPDTrainer:
     self.device = device
     self.max_norm = max_norm
     self.noise_multiplier = noise_multiplier
+    self.epsilon = epsilon
     self.steps = 0
     self.logger = logger
     if logger is None:
@@ -53,15 +67,15 @@ class MSPDTrainer:
     # For vectorized per-example gradient clipping
     self._wrap_optimizer(optimizer)
 
-    if 'STAGE_1' in self.stages:
-      self._stage_1_noise()
-
   @staticmethod
   def accuracy(preds: np.ndarray, labels: np.ndarray):
     return (preds == labels).mean()
 
   def train(self):
     # Inject noise to data
+    if Stages.STAGE_1 in self.stages:
+      self._stage_1_noise()
+
     best_acc = 0
     for epoch in range(self.epochs):
       prog_bar = tqdm(total=len(self.train_loader) * self.batch_size, file=sys.stdout)
@@ -98,7 +112,7 @@ class MSPDTrainer:
       best_acc = max(best_acc, acc)
 
     # Inject noise to model's weights
-    if 'STAGE_3' in self.stages:
+    if Stages.STAGE_3 in self.stages:
       self._stage_3_noise()
 
   def evaluate(self, loader):
@@ -128,6 +142,11 @@ class MSPDTrainer:
     if is_best:
       shutil.copyfile(save_path, os.path.join(checkpoint_dir, f"model_best_epoch_{epoch}.pth"))
 
+  def _stage_1_noise(self):
+    self.logger.log("Performing input perturbation...")
+    for loader in tqdm(self.data_loaders):
+      self._perturb_loader_data(loader)
+
   def _perturb_loader_data(self, data_loader: DataLoader):
     # FIXME: fix for non-image data
 
@@ -140,7 +159,8 @@ class MSPDTrainer:
     data_loader.dataset.data = dataset.astype(np.uint8)
     return data_loader
 
-  def _perturb_dataset(self, dataset: torch.Tensor, sensitivity: torch.Tensor, eps: Optional[float] = 1):
+  @staticmethod
+  def _perturb_dataset(dataset: torch.Tensor, sensitivity: torch.Tensor, eps: Optional[float] = 1):
     delta = 1 / (1.5 * len(dataset))
     stds = sensitivity * np.sqrt(2 * np.log(1.25 / delta)) / (25 * eps)
     shape = [dataset.size(i) for i in range(len(dataset.shape))]
@@ -152,7 +172,6 @@ class MSPDTrainer:
 
   def _get_sensitivity(self, dataset: torch.Tensor) -> torch.Tensor:
     """
-
     :param dataset: [n, c, *] or [n, *]
     """
     if len(dataset.shape) == 2:
@@ -164,12 +183,31 @@ class MSPDTrainer:
     sensitivity = torch.sqrt(torch.abs(norms.max(dim=dim)[0] - norms.min(dim=dim)[0]))
     return sensitivity
 
-  def _stage_1_noise(self):
-    for loader in self.data_loaders:
-      self._perturb_loader_data(loader)
+  def _stage_3_noise(self, clipping_norm: Optional[Union[float, List[float]]] = None):
+    """
+    Output perturbation on the model's weights
 
-  def _stage_3_noise(self):
-    pass
+    'Federated learning with differential privacy: Algorithms and performance analysis', Wei et al., 2019
+    :param clipping_norm:
+
+    """
+    delta = 1 / (1.5 * len(self.train_loader.dataset))
+    max_sensitivity = 2 * clipping_norm / len(self.train_loader.dataset)
+    exposure = len(self.train_loader) * self.epochs
+    std = (max_sensitivity * exposure * np.sqrt(2 * np.log(1.25 / delta))) / self.epsilon
+    self.logger.log(f"Output Perturbation -> max_sensitivity: {max_sensitivity:.4f}, "
+                    f"std: {std:.4f}, "
+                    f"max_norm: {clipping_norm}")
+    # Sanitize
+    for i, p in enumerate(self.model.parameters()):
+      if clipping_norm is not None:
+        if isinstance(clipping_norm, list):
+          clip_val = clipping_norm[i]
+        else:
+          clip_val = clipping_norm
+        p.data /= max(1, torch.norm(p.data) / clip_val)
+      noise = torch.normal(mean=0, std=std, size=p.shape).to(p.data.device)
+      p.data.add_(noise)
 
   def _wrap_optimizer(self, optimizer: torch.optim):
     # Opacus

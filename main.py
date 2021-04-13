@@ -134,7 +134,7 @@ def _parse_args():
 
 from models import Cifar10Net
 from dp.dp_optim import DPSGD
-from msdp import MSPDTrainer
+from msdp import MSPDTrainer, Stages
 
 
 def train(args):
@@ -159,16 +159,15 @@ def train(args):
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
-                        stages=['STAGE_1', 'STAGE_3'],
-                        epochs=args.epochs,
+                        epochs=1,
                         batch_size=args.batch_size,
                         device=device,
+                        stages=[Stages.STAGE_3],
                         max_norm=args.max_norm,
                         noise_multiplier=args.noise_multiplier,
-                        )
+                        epsilon=1)
 
   trainer.train_and_test()
-
 
 
 def main():
