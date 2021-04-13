@@ -1,5 +1,6 @@
 import torch.nn as nn
 
+
 class Cifar10Net(nn.Module):
   def __init__(self):
     super(Cifar10Net, self).__init__()
@@ -16,7 +17,7 @@ class Cifar10Net(nn.Module):
       nn.ReLU(True),
       nn.MaxPool2d(2),
       nn.Conv2d(128, NUM_CLASSES, kernel_size=4),
-      # nn.LogSoftmax(dim=1)
+      nn.Softmax(dim=1)
     )
 
   def forward(self, x):

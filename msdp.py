@@ -121,6 +121,7 @@ class Stage1(DPStage):
     dataset = np.moveaxis(noised_data.numpy(), 1, -1)
     dataset = (dataset - dataset.min()) / (dataset.max() - dataset.min()) * 255
     data_loader.dataset.data = dataset.astype(np.uint8)
+    data_loader.stage_1_attached = True
     return data_loader
 
   def _perturb_dataset(self, dataset: torch.Tensor, sensitivity: torch.Tensor):
@@ -301,7 +302,9 @@ class MSPDTrainer:
   def train(self):
     # Inject noise to data
     if Stages.STAGE_1 in self.stages:
-      self._stage_1_noise()
+      self._stage_1_noise([self.train_loader])
+
+    val_loader = self.val_loader if self.val_loader else self.test_loader
 
     best_acc = 0
     for epoch in range(self.epochs):
@@ -333,9 +336,9 @@ class MSPDTrainer:
       self.log(f"Training epoch [{epoch + 1}/{self.epochs}] loss: {epoch_loss:.6f}, acc: {epoch_acc:.4f}")
 
       # Validation step
-      acc = self.evaluate(self.val_loader)
+      acc = self.evaluate(val_loader)
       self.log(f"Validation Accuracy: {acc:.4f}\n")
-      self.save_checkpoint(self.model.state_dict, acc > best_acc, epoch + 1)
+      self.save_checkpoint(self.model.state_dict(), acc > best_acc, epoch + 1)
       best_acc = max(best_acc, acc)
 
     # Inject noise to model's weights
@@ -343,6 +346,8 @@ class MSPDTrainer:
       self._stage_3_noise()
 
   def evaluate(self, loader):
+    if hasattr(loader, 'stage_1_attached') and loader.stage_1_attached and Stages.STAGE_1 in self.stages:
+      self._stage_1_noise([loader])
     self.model.eval()
     with torch.no_grad():
       accuracies = []
@@ -369,8 +374,8 @@ class MSPDTrainer:
     if is_best:
       shutil.copyfile(save_path, os.path.join(checkpoint_dir, f"model_best_epoch_{epoch}.pth"))
 
-  def _stage_1_noise(self):
-    for i, loader in enumerate(self.data_loaders):
+  def _stage_1_noise(self, loaders):
+    for i, loader in enumerate(loaders):
       self.stages[Stages.STAGE_1].apply(loader)
 
   def _stage_3_noise(self):

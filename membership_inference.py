@@ -11,16 +11,14 @@ from models import *
 
 def get_target_model(args):
   model_cls = Cifar10Net
-  optimizer_cls = DPSGD
+  optimizer_cls = optim.SGD
   criterion_cls = nn.NLLLoss
   optimizer_params = {
-    'l2_norm_clip': args.max_norm,
-    'noise_multiplier': args.noise_multiplier,
-    'minibatch_size': args.batch_size,
-    'microbatch_size': args.minibatch_size,
-    'lr': args.lr
+    'lr': args.lr,
+    'momentum': args.momentum,
+    'weight_decay': args.weight_decay,
   }
-  return DPTorchWrapper(
+  return TorchWrapper(
     model_cls,
     criterion_cls,
     optimizer_cls,
@@ -58,12 +56,12 @@ def get_attack_model(enable_cuda=True):
   )
 
 
-def membership_inference_attack(args):
-  NUM_CLASSES = 10
-  SHADOW_DATASET_SIZE = 4000
-  ATTACK_TEST_DATASET_SIZE = 4000
-  NUM_SHADOWS = 3
-  ATTACK_EPOCHS = 10
+def membership_inference_attack(args,
+                                num_classes,
+                                shadow_dataset_size,
+                                attack_test_dataset_size,
+                                num_shadows,
+                                attack_epochs):
   RAND_SEED = args.seed
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -80,11 +78,12 @@ def membership_inference_attack(args):
   X_train, y_train = np.moveaxis(train_dataset.data, -1, 1), np.array(train_dataset.targets)
   X_test, y_test = np.moveaxis(test_dataset.data, -1, 1), np.array(test_dataset.targets)
 
-  print('Training the victim model')
   target_model = get_target_model(args)
   if args.trained_model_path is not None:
+    print('Loading the victim model')
     target_model.module_.load_state_dict(torch.load(args.trained_model_path))
   else:
+    print('Training the victim model')
     target_model.fit(X=X_train,
                      y=y_train,
                      batch_size=args.batch_size,
@@ -92,16 +91,15 @@ def membership_inference_attack(args):
                      shuffle=True,
                      validation_split=0.1,
                      verbose=True,
-                     minibatch_size=1
                      )
     if args.save_model:
-      torch.save(target_model.module_.statde_dict, args.save_model_path)
+      torch.save(target_model.module_.statde_dict(), args.save_model_path)
 
   # Train the shadow models.
   smb = ShadowModelBundle(
     get_shadow_model,
-    shadow_dataset_size=SHADOW_DATASET_SIZE,
-    num_models=NUM_SHADOWS,
+    shadow_dataset_size=shadow_dataset_size,
+    num_models=num_shadows,
     seed=RAND_SEED
   )
 
@@ -125,19 +123,19 @@ def membership_inference_attack(args):
   )
 
   # ShadowModelBundle returns data in the format suitable for the AttackModelBundle.
-  amb = AttackModelBundle(get_attack_model, num_classes=NUM_CLASSES, class_one_hot_coded=False)
+  amb = AttackModelBundle(get_attack_model, num_classes=num_classes, class_one_hot_coded=False)
 
   # Fit the attack models.
   print("Training the attack models...")
   amb.fit(
-    X_shadow, y_shadow, fit_kwargs=dict(epochs=ATTACK_EPOCHS, verbose=True)
+    X_shadow, y_shadow, fit_kwargs=dict(epochs=attack_epochs, verbose=True)
   )
 
   # Test the success of the attack.
 
   # Prepare examples that were in the training, and out of the training.
-  data_in = X_train[:ATTACK_TEST_DATASET_SIZE], y_train[:ATTACK_TEST_DATASET_SIZE]
-  data_out = X_test[:ATTACK_TEST_DATASET_SIZE], y_test[:ATTACK_TEST_DATASET_SIZE]
+  data_in = X_train[:attack_test_dataset_size], y_train[:attack_test_dataset_size]
+  data_out = X_test[:attack_test_dataset_size], y_test[:attack_test_dataset_size]
 
   # Compile them into the expected format for the AttackModelBundle.
   attack_test_data, real_membership_labels = prepare_attack_data(
@@ -148,4 +146,4 @@ def membership_inference_attack(args):
   attack_guesses = amb.predict(attack_test_data)
   attack_accuracy = np.mean(attack_guesses == real_membership_labels)
 
-  print(attack_accuracy)
+  print(f"MIA accuracy: ", attack_accuracy)

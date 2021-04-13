@@ -1,11 +1,11 @@
 import argparse
+
 import torch
+
 from datasets.dataset import *
-from torchvision.models import resnet18
-import matplotlib.pyplot as plt
-from torchvision.utils import save_image, make_grid
-from typing import Optional
-from torch.utils.data.dataloader import DataLoader
+from membership_inference import membership_inference_attack
+from models import Cifar10Net
+from msdp import MSPDTrainer, Stages, MSDPStagesConfig
 
 if torch.cuda.is_available():
   torch.backends.cudnn.deterministic = True
@@ -145,17 +145,12 @@ def _parse_args():
   parser.add_argument(
     "--trained-model-path",
     type=str,
-    default='./model.pth',
+    default='./checkpoints_nonprivate/checkpoint.pth',
     help="the path of the trained model"
   )
 
   args = parser.parse_args()
   return args
-
-
-from models import Cifar10Net
-from dp.dp_optim import DPSGD
-from msdp import MSPDTrainer, Stages, MSDPStagesConfig
 
 
 def train(args):
@@ -181,23 +176,28 @@ def train(args):
   stages_config = MSDPStagesConfig()
   # stages_config.add_stage(Stages.STAGE_1, {'eps': args.eps1})
   # stages_config.add_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
-  stages_config.add_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
+  # stages_config.add_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
-                        epochs=1,
+                        epochs=args.epochs,
                         batch_size=args.batch_size,
                         device=device,
-                        stages_config=stages_config
-                       )
+                        # stages_config=stages_config
+                        )
 
   trainer.train_and_test()
 
 
 def main():
   args = _parse_args()
-  # membership_inference_attack(args)
-  train(args)
+  membership_inference_attack(args,
+                              num_classes=10,
+                              shadow_dataset_size=4000,
+                              attack_test_dataset_size=4000,
+                              num_shadows=3,
+                              attack_epochs=10)
+  # train(args)
 
 
 if __name__ == '__main__':
