@@ -20,6 +20,6 @@ class Logger:
       if file not in Logger.STD_files:
         file.close()
 
-  def log(self, *message):
+  def log(self, *message, module=''):
     for file in self.log_files:
-      print(*message, file=file)
+      print(f'[{module}]', *message, file=file)

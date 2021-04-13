@@ -70,11 +70,18 @@ def _parse_args():
     help="momentum"
   )
   parser.add_argument(
-    "--max_norm",
+    "--max_grad_norm",
     type=float,
     default=2,
-    metavar="MAX_NORM",
-    help="l2 clipping norm (default: 1.0)",
+    metavar="MAX_GRAD_NORM",
+    help="l2 gradient clipping norm (default: 1.0)",
+  )
+  parser.add_argument(
+    "--max_weight_norm",
+    type=float,
+    default=2,
+    metavar="MAX_WEIGHT_NORM",
+    help="l2 weights clipping norm (default: 1.0)",
   )
   parser.add_argument(
     "--noise_multiplier",
@@ -82,6 +89,20 @@ def _parse_args():
     default=0.5,
     metavar="NOISE_MULTIPLIER",
     help="noise_multiplier (default: 1.0)",
+  )
+  parser.add_argument(
+    "--eps1",
+    type=float,
+    default=1,
+    metavar="EPS1",
+    help="Stage 1 Epsilon (Input perturbation)"
+  )
+  parser.add_argument(
+    "--eps3",
+    type=float,
+    default=1,
+    metavar="EPS3",
+    help="Stage 3 Epsilon (Output perturbation)"
   )
   parser.add_argument(
     "--gamma",
@@ -134,7 +155,7 @@ def _parse_args():
 
 from models import Cifar10Net
 from dp.dp_optim import DPSGD
-from msdp import MSPDTrainer, Stages
+from msdp import MSPDTrainer, Stages, MSDPStagesConfig
 
 
 def train(args):
@@ -156,16 +177,19 @@ def train(args):
 
   # optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
   optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+
+  stages_config = MSDPStagesConfig()
+  # stages_config.add_stage(Stages.STAGE_1, {'eps': args.eps1})
+  # stages_config.add_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
+  stages_config.add_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
                         epochs=1,
                         batch_size=args.batch_size,
                         device=device,
-                        stages=[Stages.STAGE_3],
-                        max_norm=args.max_norm,
-                        noise_multiplier=args.noise_multiplier,
-                        epsilon=1)
+                        stages_config=stages_config
+                       )
 
   trainer.train_and_test()
 
