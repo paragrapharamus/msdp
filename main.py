@@ -145,7 +145,7 @@ def _parse_args():
   parser.add_argument(
     "--trained-model-path",
     type=str,
-    default='./checkpoints_nonprivate/checkpoint.pth',
+    default='./checkpoints/checkpoint.pth',
     help="the path of the trained model"
   )
 
@@ -180,7 +180,7 @@ def train(args):
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
-                        epochs=args.epochs,
+                        epochs=50,
                         batch_size=args.batch_size,
                         device=device,
                         # stages_config=stages_config

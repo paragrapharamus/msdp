@@ -12,7 +12,7 @@ from models import *
 def get_target_model(args):
   model_cls = Cifar10Net
   optimizer_cls = optim.SGD
-  criterion_cls = nn.NLLLoss
+  criterion_cls = nn.CrossEntropyLoss
   optimizer_params = {
     'lr': args.lr,
     'momentum': args.momentum,
@@ -32,7 +32,7 @@ def get_target_model(args):
 def get_shadow_model():
   model_cls = Cifar10Net
   optimizer_cls = torch.optim.Adam
-  criterion_cls = nn.NLLLoss
+  criterion_cls = nn.CrossEntropyLoss
 
   return TorchWrapper(
     model_cls,
@@ -73,7 +73,7 @@ def membership_inference_attack(args,
     train_kwargs.update(cuda_kwargs)
     test_kwargs.update(cuda_kwargs)
 
-  test_dataset, train_dataset, valid_dataset = get_cifar10_dataset()
+  train_dataset, _, test_dataset = get_cifar10_dataset()
 
   X_train, y_train = np.moveaxis(train_dataset.data, -1, 1), np.array(train_dataset.targets)
   X_test, y_test = np.moveaxis(test_dataset.data, -1, 1), np.array(test_dataset.targets)

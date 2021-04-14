@@ -14,11 +14,11 @@ def get_cifar10_dataset():
   train_dataset = datasets.CIFAR10("../data", train=True, download=True, transform=transform_trainval)
   valid_dataset = datasets.CIFAR10("../data", train=True, download=True, transform=transform_trainval)
   test_dataset = datasets.CIFAR10("../data", train=False, transform=transform_test)
-  return test_dataset, train_dataset, valid_dataset
+  return train_dataset, valid_dataset, test_dataset
 
 
 def load_cifar10(test_kwargs, train_kwargs):
-  test_dataset, train_dataset, valid_dataset = get_cifar10_dataset()
+  train_dataset, valid_dataset, test_dataset = get_cifar10_dataset()
   training_dataset_size = len(train_dataset)
   indices = list(range(training_dataset_size))
   split = int(np.floor(0.1 * training_dataset_size))

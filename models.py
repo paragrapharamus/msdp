@@ -17,7 +17,7 @@ class Cifar10Net(nn.Module):
       nn.ReLU(True),
       nn.MaxPool2d(2),
       nn.Conv2d(128, NUM_CLASSES, kernel_size=4),
-      nn.Softmax(dim=1)
+      nn.LogSoftmax(dim=1)
     )
 
   def forward(self, x):

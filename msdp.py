@@ -2,7 +2,7 @@ import os
 import shutil
 import sys
 import types
-
+from enum import Enum
 from typing import List, Union, Optional
 
 import numpy as np
@@ -11,10 +11,10 @@ import torch.nn.functional as F
 from opacus import PerSampleGradientClipper
 from opacus.utils import clipping
 from torch import nn
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+
 from log import Logger
-from enum import Enum
 
 
 class Stages(Enum):

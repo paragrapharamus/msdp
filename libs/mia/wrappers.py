@@ -1,4 +1,5 @@
 import copy
+import sys
 
 import numpy
 import torch
@@ -256,7 +257,7 @@ class TorchWrapper(object):
           data_iter = val_loader
 
         if verbose and phase == "train":
-          prog_bar = tqdm.tqdm(total=len(data_iter.dataset))
+          prog_bar = tqdm.tqdm(total=len(data_iter.dataset), file=sys.stdout)
 
         epoch_dataset_size = 0
         running_loss = 0.0
