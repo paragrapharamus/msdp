@@ -8,8 +8,11 @@ from typing import List, Union, Optional
 import numpy as np
 import torch
 import torch.nn.functional as F
+import pytorch_lightning as pl
+
 from opacus import PerSampleGradientClipper
 from opacus.utils import clipping
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torch import nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -55,39 +58,6 @@ class Stages(Enum):
           Could be a single real value, to which all weights will be
           clipped or a list of maximum norms per layer
   """
-
-
-class MSDPStagesConfig:
-  def __init__(self):
-    self.stage_dict = {Stages.STAGE_1: None, Stages.STAGE_2: None, Stages.STAGE_3: None}
-
-  # noinspection PyTypeChecker
-  def add_stage(self, stage_type: Stages, param_dict):
-    if stage_type == Stages.STAGE_1:
-      self.stage_dict[stage_type] = Stage1(param_dict['eps'])
-    elif stage_type == Stages.STAGE_2:
-      self.stage_dict[stage_type] = Stage2(param_dict['noise_multiplier'],
-                                           param_dict['max_grad_norm'])
-    elif stage_type == Stages.STAGE_3:
-      self.stage_dict[stage_type] = Stage3(param_dict['eps'],
-                                           param_dict['max_weight_norm'])
-    else:
-      raise ValueError("Unknown stage type.")
-
-  def add_stages(self, stages_dict: dict):
-    """
-
-    :param stages_dict:
-    """
-    for stage_type, param_dic in stages_dict.items():
-      self.add_stage(stage_type, param_dic)
-
-  def get_stages(self):
-    stages = {}
-    for stage_type, stage in self.stage_dict.items():
-      if stage is not None:
-        stages[stage_type] = stage
-    return stages
 
 
 class DPStage:
@@ -225,6 +195,7 @@ class Stage3(DPStage):
             training_dataset_size: float,
             epochs: int,
             batch_size: int) -> nn.Module:
+    self.log("Output Perturbation...")
     # Compute probability of DP failure
     delta = 1 / (1.5 * training_dataset_size)
     # Number of times the training data is seen by the model
@@ -250,47 +221,82 @@ class Stage3(DPStage):
     return model
 
 
+class _DataModule(pl.LightningDataModule):
+
+  def __init__(self, data_loaders):
+    super().__init__()
+    if len(data_loaders) == 2:
+      self.train_loader, self.test_loader = data_loaders
+      self.val_loader = self.test_loader
+    elif len(data_loaders) == 3:
+      self.train_loader, self.val_loader, self.test_loader = data_loaders
+    else:
+      raise Exception("Invalid number of loaders")
+
+  def train_dataloader(self):
+    return self.train_loader
+
+  def val_dataloader(self):
+    return self.val_loader
+
+  def test_dataloader(self):
+    return self.test_loader
+
+
 class MSPDTrainer:
   """
   Multistage differentially private trainer
   """
   STATS_FMT = "[{:>5s}] loss: {:+.4f}, acc: {:.4f}"
 
-  def __init__(self, model: nn.Module,
+  def __init__(self, model: pl.LightningModule,
                optimizer: torch.optim,
                data_loaders: DataLoader,
                epochs: int,
                batch_size: int,
                device: torch.device,
-               stages_config: Optional[MSDPStagesConfig] = None,
                logger: Optional[Logger] = None):
 
     self.model = model
-    self.data_loaders = data_loaders
-    if len(data_loaders) == 2:
-      self.train_loader, self.test_loader = data_loaders
-    elif len(data_loaders) == 3:
-      self.train_loader, self.val_loader, self.test_loader = data_loaders
-    else:
-      raise Exception("Invalid number of loaders")
+
+    # checkpoint_callback = ModelCheckpoint(
+    #   monitor='valid_acc_epoch',
+    #   dirpath=self._get_checkpoint_dir_path(),
+    #   filename='checkpoint-{epoch:02d}-{val_acc_epoch:.3f}',
+    #   save_top_k=3,
+    #   mode='max',
+    # )
+    # self.trainer = pl.Trainer(min_epochs=epochs,
+    #                           max_epochs=epochs,
+    #                           gpus=torch.cuda.device_count(),
+    #                           callbacks=[checkpoint_callback])
+    self.optimizer = optimizer
+
+    self.data_module = _DataModule(data_loaders)
 
     self.epochs = epochs
     self.batch_size = batch_size
     self.device = device
     self.steps = 0
+
+    self.stages = dict()
+
     self.logger = logger
     if logger is None:
       self.logger = Logger([sys.stdout, './msdp.log'])
 
-    self.stages = dict() if stages_config is None else stages_config.get_stages()
-    for _, stage in self.stages.items():
-      stage.add_logger(self.logger)
-
-    # Wrap the optimizer to perform DP training
-    if Stages.STAGE_2 in self.stages:
-      self.optimizer = self.stages[Stages.STAGE_2].apply(model, optimizer, device)
+  def attach_stage(self, stage_type: Stages, stage_param_dict: dict):
+    if stage_type == Stages.STAGE_1:
+      self.stages[stage_type] = Stage1(stage_param_dict['eps'])
+    elif stage_type == Stages.STAGE_2:
+      self.stages[stage_type] = Stage2(stage_param_dict['noise_multiplier'],
+                                       stage_param_dict['max_grad_norm'])
+    elif stage_type == Stages.STAGE_3:
+      self.stages[stage_type] = Stage3(stage_param_dict['eps'],
+                                       stage_param_dict['max_weight_norm'])
     else:
-      self.optimizer = optimizer
+      raise ValueError("Unknown stage type.")
+    self.log(f"{stage_type} successfully attached.")
 
   @staticmethod
   def accuracy(preds: np.ndarray, labels: np.ndarray):
@@ -300,22 +306,31 @@ class MSPDTrainer:
     self.logger.log(*msg, module='MSPDTrainer')
 
   def train(self):
+
+    for _, stage in self.stages.items():
+      stage.add_logger(self.logger)
+
     # Inject noise to data
     if Stages.STAGE_1 in self.stages:
-      self._stage_1_noise([self.train_loader])
+      self._stage_1_noise([self.data_module.train_dataloader()])
 
-    val_loader = self.val_loader if self.val_loader else self.test_loader
+    # Wrap the optimizer to perform DP training
+    if Stages.STAGE_2 in self.stages:
+      self.optimizer = self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device)
+
+    train_loader = self.data_module.train_dataloader()
+    val_loader = self.data_module.val_dataloader()
 
     best_acc = 0
     for epoch in range(self.epochs):
-      prog_bar = tqdm(total=len(self.train_loader) * self.batch_size, file=sys.stdout)
+      prog_bar = tqdm(total=len(train_loader) * self.batch_size, file=sys.stdout)
       prog_bar.set_description("Epoch %d/%d" % (epoch + 1, self.epochs))
       losses = []
       accuracies = []
 
       # Model training
       self.model.train()
-      for batch_idx, (data, targets) in enumerate(self.train_loader):
+      for batch_idx, (data, targets) in enumerate(train_loader):
         data, targets = data.to(self.device), targets.to(self.device)
 
         output = self.model(data)
@@ -345,7 +360,7 @@ class MSPDTrainer:
     if Stages.STAGE_3 in self.stages:
       self._stage_3_noise()
 
-  def evaluate(self, loader):
+  def evaluate(self, loader: DataLoader):
     if hasattr(loader, 'stage_1_attached') and loader.stage_1_attached and Stages.STAGE_1 in self.stages:
       self._stage_1_noise([loader])
     self.model.eval()
@@ -361,7 +376,7 @@ class MSPDTrainer:
 
   def train_and_test(self):
     self.train()
-    acc = self.evaluate(self.test_loader)
+    acc = self.evaluate(self.data_module.test_dataloader())
     self.log(f"Final test Accuracy {acc:.4f}")
 
   @staticmethod
@@ -374,9 +389,21 @@ class MSPDTrainer:
     if is_best:
       shutil.copyfile(save_path, os.path.join(checkpoint_dir, f"model_best_epoch_{epoch}.pth"))
 
+  @staticmethod
+  def _get_checkpoint_dir_path():
+    checkpoint_dir_base = os.path.join(os.getcwd(), 'checkpoints')
+    checkpoint_dir = checkpoint_dir_base
+    dir_id = 1
+    while os.path.exists(checkpoint_dir):
+      checkpoint_dir = f"{checkpoint_dir_base}_{dir_id}"
+      dir_id += 1
+    os.mkdir(checkpoint_dir)
+    return checkpoint_dir
+
   def _stage_1_noise(self, loaders):
     for i, loader in enumerate(loaders):
       self.stages[Stages.STAGE_1].apply(loader)
 
   def _stage_3_noise(self):
-    self.stages[Stages.STAGE_3].apply(self.model, len(self.train_loader.dataset), self.epochs, self.batch_size)
+    train_loader = self.data_module.train_dataloader()
+    self.stages[Stages.STAGE_3].apply(self.model, len(train_loader.dataset), self.epochs, self.batch_size)

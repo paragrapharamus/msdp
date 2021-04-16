@@ -129,7 +129,8 @@ dmypy.json
 .pyre/
 
 .idea/
-
+libs/PrivacyRaven
+lightning_logs/
 cifar10/
 ref/
 checkpoints*/

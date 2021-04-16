@@ -1,18 +1,12 @@
 import argparse
 
 import torch
+import pytorch_lightning as pl
 
 from datasets.dataset import *
 from membership_inference import membership_inference_attack
 from models import Cifar10Net
-from msdp import MSPDTrainer, Stages, MSDPStagesConfig
-
-if torch.cuda.is_available():
-  torch.backends.cudnn.deterministic = True
-RAND_SEED = 42
-np.random.seed(RAND_SEED)
-torch.manual_seed(RAND_SEED)
-
+from msdp import MSPDTrainer, Stages
 
 def _parse_args():
   parser = argparse.ArgumentParser()
@@ -159,7 +153,7 @@ def train(args):
   train_kwargs = {"batch_size": args.batch_size}
   test_kwargs = {"batch_size": args.test_batch_size}
   if use_cuda:
-    cuda_kwargs = {"num_workers": 1, "pin_memory": True}
+    cuda_kwargs = {"num_workers": 2, "pin_memory": True}
     train_kwargs.update(cuda_kwargs)
     test_kwargs.update(cuda_kwargs)
     print('GPU: ' + str(torch.cuda.get_device_name(0)))
@@ -173,31 +167,36 @@ def train(args):
   # optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
   optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
-  stages_config = MSDPStagesConfig()
-  # stages_config.add_stage(Stages.STAGE_1, {'eps': args.eps1})
-  # stages_config.add_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
-  # stages_config.add_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
-                        epochs=50,
+                        epochs=1,
                         batch_size=args.batch_size,
                         device=device,
-                        # stages_config=stages_config
                         )
+
+  trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
+  trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
+  trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   trainer.train_and_test()
 
 
 def main():
   args = _parse_args()
-  membership_inference_attack(args,
-                              num_classes=10,
-                              shadow_dataset_size=4000,
-                              attack_test_dataset_size=4000,
-                              num_shadows=3,
-                              attack_epochs=10)
-  # train(args)
+
+  # Deterministic, reproducible behaviour
+  pl.seed_everything(args.seed)
+  if torch.cuda.is_available():
+    torch.backends.cudnn.deterministic = True
+
+  # membership_inference_attack(args,
+  #                             num_classes=10,
+  #                             shadow_dataset_size=4000,
+  #                             attack_test_dataset_size=4000,
+  #                             num_shadows=3,
+  #                             attack_epochs=10)
+  train(args)
 
 
 if __name__ == '__main__':
