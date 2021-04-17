@@ -27,14 +27,22 @@ class Cifar10Net(pl.LightningModule):
     self.valid_acc = pl.metrics.Accuracy()
     self.test_acc = pl.metrics.Accuracy()
 
+  @property
+  def automatic_optimization(self) -> bool:
+    return False
+
   def forward(self, x):
     return self.classifier(x.float()).view(-1, 10)
 
   def training_step(self, batch, batch_idx):
+    opt = self.optimizers()
+    opt.zero_grad()
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
     loss = F.cross_entropy(output, targets)
+    self.manual_backward(loss, opt)
+    opt.step()
     self.log('train_acc_step', self.train_acc(torch.argmax(output, 1), targets))
     return loss
 
@@ -68,7 +76,7 @@ class Cifar10Net(pl.LightningModule):
     self._optimizer = optimizer
 
   def configure_optimizers(self):
-    if hasattr(self, "optimizer"):
+    if hasattr(self, "_optimizer"):
       optimizer = self._optimizer
     else:
       optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)

@@ -153,7 +153,7 @@ def train(args):
   train_kwargs = {"batch_size": args.batch_size}
   test_kwargs = {"batch_size": args.test_batch_size}
   if use_cuda:
-    cuda_kwargs = {"num_workers": 2, "pin_memory": True}
+    cuda_kwargs = {"num_workers": 1, "pin_memory": True}
     train_kwargs.update(cuda_kwargs)
     test_kwargs.update(cuda_kwargs)
     print('GPU: ' + str(torch.cuda.get_device_name(0)))
@@ -175,9 +175,9 @@ def train(args):
                         device=device,
                         )
 
-  trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
+  # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
   trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
-  trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
+  # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   trainer.train_and_test()
 

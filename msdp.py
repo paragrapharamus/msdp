@@ -259,17 +259,17 @@ class MSPDTrainer:
 
     self.model = model
 
-    # checkpoint_callback = ModelCheckpoint(
-    #   monitor='valid_acc_epoch',
-    #   dirpath=self._get_checkpoint_dir_path(),
-    #   filename='checkpoint-{epoch:02d}-{val_acc_epoch:.3f}',
-    #   save_top_k=3,
-    #   mode='max',
-    # )
-    # self.trainer = pl.Trainer(min_epochs=epochs,
-    #                           max_epochs=epochs,
-    #                           gpus=torch.cuda.device_count(),
-    #                           callbacks=[checkpoint_callback])
+    checkpoint_callback = ModelCheckpoint(
+      monitor='valid_acc_epoch',
+      dirpath=self._get_checkpoint_dir_path(),
+      filename='checkpoint-{epoch:02d}-{val_acc_epoch:.3f}',
+      save_top_k=3,
+      mode='max',
+    )
+    self.trainer = pl.Trainer(min_epochs=epochs,
+                              max_epochs=epochs,
+                              gpus=torch.cuda.device_count(),)
+                              # callbacks=[checkpoint_callback])
     self.optimizer = optimizer
 
     self.data_module = _DataModule(data_loaders)
@@ -312,82 +312,28 @@ class MSPDTrainer:
 
     # Inject noise to data
     if Stages.STAGE_1 in self.stages:
-      self._stage_1_noise([self.data_module.train_dataloader()])
+      self._stage_1_noise([self.data_module.train_dataloader(), self.data_module.val_dataloader()])
 
     # Wrap the optimizer to perform DP training
     if Stages.STAGE_2 in self.stages:
-      self.optimizer = self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device)
+      self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device))
 
-    train_loader = self.data_module.train_dataloader()
-    val_loader = self.data_module.val_dataloader()
-
-    best_acc = 0
-    for epoch in range(self.epochs):
-      prog_bar = tqdm(total=len(train_loader) * self.batch_size, file=sys.stdout)
-      prog_bar.set_description("Epoch %d/%d" % (epoch + 1, self.epochs))
-      losses = []
-      accuracies = []
-
-      # Model training
-      self.model.train()
-      for batch_idx, (data, targets) in enumerate(train_loader):
-        data, targets = data.to(self.device), targets.to(self.device)
-
-        output = self.model(data)
-        loss = F.cross_entropy(output, targets)
-
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-        losses.append(loss.item())
-        accuracies.append(self.accuracy(torch.argmax(output, 1).detach().cpu().numpy(), targets.detach().cpu().numpy()))
-        prog_bar.update(len(data))
-
-      # Epoch statistics.
-      epoch_loss = sum(losses) / len(losses)
-      epoch_acc = sum(accuracies) / len(accuracies)
-      prog_bar.close()
-      self.log(f"Training epoch [{epoch + 1}/{self.epochs}] loss: {epoch_loss:.6f}, acc: {epoch_acc:.4f}")
-
-      # Validation step
-      acc = self.evaluate(val_loader)
-      self.log(f"Validation Accuracy: {acc:.4f}\n")
-      self.save_checkpoint(self.model.state_dict(), acc > best_acc, epoch + 1)
-      best_acc = max(best_acc, acc)
+    self.trainer.fit(self.model, datamodule=self.data_module)
 
     # Inject noise to model's weights
     if Stages.STAGE_3 in self.stages:
       self._stage_3_noise()
 
-  def evaluate(self, loader: DataLoader):
+  def test(self):
+    loader = self.data_module.test_dataloader()
     if hasattr(loader, 'stage_1_attached') and loader.stage_1_attached and Stages.STAGE_1 in self.stages:
       self._stage_1_noise([loader])
-    self.model.eval()
-    with torch.no_grad():
-      accuracies = []
-      for data, target in loader:
-        data, target = data.to(self.device), target.to(self.device)
-        output = self.model(data)
-        accuracies.append(self.accuracy(torch.argmax(output, 1).detach().cpu().numpy(), target.detach().cpu().numpy()))
 
-      accuracy = sum(accuracies) / len(accuracies)
-      return accuracy
+    self.trainer.test(self.model, datamodule=self.data_module)
 
   def train_and_test(self):
     self.train()
-    acc = self.evaluate(self.data_module.test_dataloader())
-    self.log(f"Final test Accuracy {acc:.4f}")
-
-  @staticmethod
-  def save_checkpoint(state, is_best, epoch, filename="checkpoint.pth"):
-    checkpoint_dir = os.path.join(os.getcwd(), 'checkpoints')
-    if not os.path.exists(checkpoint_dir):
-      os.mkdir(os.path.join(os.getcwd(), 'checkpoints'))
-    save_path = os.path.join(checkpoint_dir, filename)
-    torch.save(state, save_path)
-    if is_best:
-      shutil.copyfile(save_path, os.path.join(checkpoint_dir, f"model_best_epoch_{epoch}.pth"))
+    self.test()
 
   @staticmethod
   def _get_checkpoint_dir_path():
