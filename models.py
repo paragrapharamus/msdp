@@ -4,29 +4,7 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 
 
-class Cifar10Net(pl.LightningModule):
-  def __init__(self):
-    super(Cifar10Net, self).__init__()
-
-    NUM_CLASSES = 10
-    self.classifier = nn.Sequential(
-      nn.Conv2d(3, 32, kernel_size=3, padding=1),
-      nn.ReLU(True),
-      nn.MaxPool2d(2),
-      nn.Conv2d(32, 64, kernel_size=3, padding=1),
-      nn.ReLU(True),
-      nn.MaxPool2d(2),
-      nn.Conv2d(64, 128, kernel_size=3, padding=1),
-      nn.ReLU(True),
-      nn.MaxPool2d(2),
-      nn.Conv2d(128, NUM_CLASSES, kernel_size=4),
-      nn.LogSoftmax(dim=1)
-    )
-
-    self.train_acc = pl.metrics.Accuracy()
-    self.valid_acc = pl.metrics.Accuracy()
-    self.test_acc = pl.metrics.Accuracy()
-
+class BaseNet(pl.LightningModule):
   @property
   def automatic_optimization(self) -> bool:
     return False
@@ -81,6 +59,30 @@ class Cifar10Net(pl.LightningModule):
     else:
       optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
     return optimizer
+
+
+class Cifar10Net(BaseNet):
+  def __init__(self):
+    super(BaseNet, self).__init__()
+
+    NUM_CLASSES = 10
+    self.classifier = nn.Sequential(
+      nn.Conv2d(3, 32, kernel_size=3, padding=1),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(32, 64, kernel_size=3, padding=1),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(64, 128, kernel_size=3, padding=1),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(128, NUM_CLASSES, kernel_size=4),
+      nn.LogSoftmax(dim=1)
+    )
+
+    self.train_acc = pl.metrics.Accuracy()
+    self.valid_acc = pl.metrics.Accuracy()
+    self.test_acc = pl.metrics.Accuracy()
 
 
 class AttackModel(nn.Module):

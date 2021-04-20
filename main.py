@@ -161,22 +161,19 @@ def train(args):
     print('CPU')
 
   dataloaders = load_cifar10(test_kwargs, train_kwargs)
-
   model = Cifar10Net().to(device)
-
-  # optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
   optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
-                        epochs=1,
+                        epochs=args.epochs,
                         batch_size=args.batch_size,
                         device=device,
                         )
 
-  # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
-  trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
+  trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
+  # trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
   # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   trainer.train_and_test()
@@ -190,12 +187,6 @@ def main():
   if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
 
-  # membership_inference_attack(args,
-  #                             num_classes=10,
-  #                             shadow_dataset_size=4000,
-  #                             attack_test_dataset_size=4000,
-  #                             num_shadows=3,
-  #                             attack_epochs=10)
   train(args)
 
 

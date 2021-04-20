@@ -1,21 +1,17 @@
 import os
-import shutil
 import sys
 import types
 from enum import Enum
 from typing import List, Union, Optional
 
 import numpy as np
-import torch
-import torch.nn.functional as F
 import pytorch_lightning as pl
-
+import torch
 from opacus import PerSampleGradientClipper
 from opacus.utils import clipping
 from pytorch_lightning.callbacks import ModelCheckpoint
 from torch import nn
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from log import Logger
 
@@ -34,7 +30,7 @@ class Stages(Enum):
   STAGE_2 = 2
   """
     Gradient Perturbation.
-    This stages wraps the optimizer and inject noise into the gradients
+    This stage wraps the optimizer and injects noise into the gradients
     Uses the following parameters:
       * noise_multiplier: float
           The ratio of the standard deviation of the Gaussian noise to
@@ -77,12 +73,16 @@ class DPStage:
 
 
 class Stage1(DPStage):
+  """
+    Input perturbation.
+    This stage adds calibrated noise directly to the training data.
+  """
+
   def __init__(self, eps: float):
     super(Stage1, self).__init__('STAGE_1')
     self.eps = eps
 
   def apply(self, data_loader: DataLoader) -> DataLoader:
-    # FIXME: fix for non-image data
     dataset = torch.tensor(np.moveaxis(data_loader.dataset.data, -1, 1)).float()
     sensitivity = self._get_sensitivity(dataset)
     self.log(f"Input perturbation: sensitivity: {sensitivity}")
@@ -94,14 +94,11 @@ class Stage1(DPStage):
     data_loader.stage_1_attached = True
     return data_loader
 
-  def _perturb_dataset(self, dataset: torch.Tensor, sensitivity: torch.Tensor):
+  def _perturb_dataset(self, dataset: torch.Tensor, sensitivity: torch.Tensor) -> torch.Tensor:
     delta = 1 / (1.5 * len(dataset))
-    stds = sensitivity * np.sqrt(2 * np.log(1.25 / delta)) / (25 * self.eps)
-    self.log(f"Input perturbation: noise std: {stds}")
-    shape = [dataset.size(i) for i in range(len(dataset.shape))]
-    shape[1] = 1
-    noise = [torch.normal(0, std, size=shape) for std in stds]
-    noise = torch.cat(noise, dim=1)
+    std = sensitivity * np.sqrt(2 * np.log(1.25 / delta)) / (25 * self.eps)
+    self.log(f"Input perturbation: noise std: {std}")
+    noise = torch.normal(0, std, size=dataset.shape)
     dataset += noise
     return dataset
 
@@ -111,15 +108,20 @@ class Stage1(DPStage):
     """
     if len(dataset.shape) == 2:
       norms = torch.norm(dataset, dim=1)
-      dim = 0
+    elif len(dataset.shape) == 4:
+      norms = torch.linalg.norm(dataset, dim=(1,2,3))
     else:
-      norms = torch.norm(dataset, dim=(2, 3)).transpose(0, 1)
-      dim = 1
-    sensitivity = torch.sqrt(torch.abs(norms.max(dim=dim)[0] - norms.min(dim=dim)[0]))
+      raise ValueError("Unknown data shape to compute the sensitivity")
+    sensitivity = torch.sqrt(torch.abs(norms.max(dim=0)[0] - norms.min(dim=0)[0]))
     return sensitivity
 
 
 class Stage2(DPStage):
+  """
+    Gradient Perturbation.
+    This stage wraps the optimizer and injects noise into the gradients
+  """
+
   def __init__(self,
                noise_multiplier: float,
                max_grad_norm: Union[float, List[float]]):
@@ -183,6 +185,11 @@ class Stage2(DPStage):
 
 
 class Stage3(DPStage):
+  """
+    Output (weights) Perturbation.
+    Injects calibrated noise into the weights of the trained model
+  """
+
   def __init__(self,
                eps: float,
                max_weight_norm: Union[float, List[float]]):
@@ -268,8 +275,8 @@ class MSPDTrainer:
     )
     self.trainer = pl.Trainer(min_epochs=epochs,
                               max_epochs=epochs,
-                              gpus=torch.cuda.device_count(),)
-                              # callbacks=[checkpoint_callback])
+                              gpus=torch.cuda.device_count(),
+                              callbacks=[checkpoint_callback])
     self.optimizer = optimizer
 
     self.data_module = _DataModule(data_loaders)
@@ -326,7 +333,7 @@ class MSPDTrainer:
 
   def test(self):
     loader = self.data_module.test_dataloader()
-    if hasattr(loader, 'stage_1_attached') and loader.stage_1_attached and Stages.STAGE_1 in self.stages:
+    if not(hasattr(loader, 'stage_1_attached') and loader.stage_1_attached) and Stages.STAGE_1 in self.stages:
       self._stage_1_noise([loader])
 
     self.trainer.test(self.model, datamodule=self.data_module)

@@ -8,7 +8,7 @@ class Logger:
     self.log_files = []
     for file in log_files:
       if isinstance(file, str):
-        self.log_files.append(open(file, 'a+'))
+        self.log_files.append(open(file, 'w+'))
       else:
         self.log_files.append(file)  # assuming file is a valid open file
 
