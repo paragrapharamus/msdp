@@ -1,12 +1,13 @@
 import argparse
 
-import torch
 import pytorch_lightning as pl
+import torch
 
+from attacks import model_extraction, membership_inference
 from datasets.dataset import *
-from membership_inference import membership_inference_attack
 from models import Cifar10Net
-from msdp import MSPDTrainer, Stages
+from msdp import MSPDTrainer
+
 
 def _parse_args():
   parser = argparse.ArgumentParser()
@@ -167,16 +168,49 @@ def train(args):
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
-                        epochs=args.epochs,
+                        epochs=30,  # args.epochs,
                         batch_size=args.batch_size,
                         device=device,
                         )
 
-  trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
+  # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
   # trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
   # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
-  trainer.train_and_test()
+  model = trainer.train_and_test()
+  return model
+
+
+def attack_model(model):
+  # Obtain seed (or public) data to be used in extraction
+  test_dataset = get_cifar10_dataset()[2]
+  split_ratio = 0.1
+  train_data, test_data = random_split(test_dataset,
+                                       [int((1 - split_ratio) * len(test_dataset)),
+                                        int(split_ratio * len(test_dataset))])
+  train_data = [train_data.dataset[i] for i in train_data.indices]
+  test_data = [test_data.dataset[i] for i in test_data.indices]
+  data_shape = (1, 3, 32, 32)
+
+  model_extraction(model=model,
+                   query_limit=1000,
+                   victim_input_shape=data_shape,
+                   number_of_targets=10,
+                   attacker_input_shape=data_shape,
+                   synthesizer_name="copycat",
+                   substitute_architecture=Cifar10Net,
+                   attack_train_data=train_data,
+                   attack_test_data=test_data)
+
+  membership_inference(model=model,
+                       query_limit=1000,
+                       victim_input_shape=data_shape,
+                       number_of_targets=10,
+                       attacker_input_shape=data_shape,
+                       synthesizer_name="copycat",
+                       substitute_architecture=Cifar10Net,
+                       attack_train_data=train_data,
+                       attack_test_data=test_data)
 
 
 def main():
@@ -187,7 +221,8 @@ def main():
   if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
 
-  train(args)
+  model = train(args)
+  attack_model(model)
 
 
 if __name__ == '__main__':

@@ -129,7 +129,7 @@ dmypy.json
 .pyre/
 
 .idea/
-libs/PrivacyRaven
+libs/
 lightning_logs/
 cifar10/
 ref/

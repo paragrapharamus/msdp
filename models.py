@@ -21,34 +21,25 @@ class BaseNet(pl.LightningModule):
     loss = F.cross_entropy(output, targets)
     self.manual_backward(loss, opt)
     opt.step()
-    self.log('train_acc_step', self.train_acc(torch.argmax(output, 1), targets))
+    self.log('train_acc', self.train_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=False)
+    self.log('train_loss', loss, prog_bar=True, on_step=True, on_epoch=False)
     return loss
-
-  def training_epoch_end(self, outs):
-    # log epoch metric
-    self.log('train_acc_epoch', self.train_acc.compute())
 
   def validation_step(self, batch, batch_idx):
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
     loss = F.cross_entropy(output, targets)
-    self.log('valid_acc_step', self.valid_acc(torch.argmax(output, 1), targets))
-    self.log('valid_loss', loss, on_step=True)
-
-  def validation_epoch_end(self, outputs):
-    self.log('valid_acc_epoch', self.valid_acc.compute())
+    self.log('valid_acc', self.valid_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
+    self.log('valid_loss', loss, on_step=True, on_epoch=True)
 
   def test_step(self, batch, batch_idx):
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
     loss = F.cross_entropy(output, targets)
-    self.log('test_acc_step', self.test_acc(torch.argmax(output, 1), targets))
-    self.log('test_loss', loss, on_step=True)
-
-  def test_epoch_end(self, outputs):
-    self.log('test_acc_epoch', self.train_acc.compute())
+    self.log('test_acc', self.test_acc(torch.argmax(output, 1), targets),  on_step=True, on_epoch=True)
+    self.log('test_loss', loss, on_step=True, on_epoch=False)
 
   def add_optimizer(self, optimizer):
     self._optimizer = optimizer
@@ -62,7 +53,7 @@ class BaseNet(pl.LightningModule):
 
 
 class Cifar10Net(BaseNet):
-  def __init__(self):
+  def __init__(self, *args):
     super(BaseNet, self).__init__()
 
     NUM_CLASSES = 10

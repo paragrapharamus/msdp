@@ -269,8 +269,8 @@ class MSPDTrainer:
     checkpoint_callback = ModelCheckpoint(
       monitor='valid_acc_epoch',
       dirpath=self._get_checkpoint_dir_path(),
-      filename='checkpoint-{epoch:02d}-{val_acc_epoch:.3f}',
-      save_top_k=3,
+      filename='checkpoint-{epoch:02d}-{valid_acc:.2f}',
+      save_top_k=-1,
       mode='max',
     )
     self.trainer = pl.Trainer(min_epochs=epochs,
@@ -331,6 +331,8 @@ class MSPDTrainer:
     if Stages.STAGE_3 in self.stages:
       self._stage_3_noise()
 
+    return self.model
+
   def test(self):
     loader = self.data_module.test_dataloader()
     if not(hasattr(loader, 'stage_1_attached') and loader.stage_1_attached) and Stages.STAGE_1 in self.stages:
@@ -339,8 +341,9 @@ class MSPDTrainer:
     self.trainer.test(self.model, datamodule=self.data_module)
 
   def train_and_test(self):
-    self.train()
+    model = self.train()
     self.test()
+    return model
 
   @staticmethod
   def _get_checkpoint_dir_path():
