@@ -4,9 +4,10 @@ import pytorch_lightning as pl
 import torch
 
 from attacks import model_extraction, membership_inference
-from datasets.dataset import *
+from datasets.dataset_util import *
+from fl.fl import FLEnvironment
 from models import Cifar10Net
-from msdp import MSPDTrainer
+from msdp import MSPDTrainer, Stages
 
 
 def _parse_args():
@@ -151,17 +152,8 @@ def _parse_args():
 def train(args):
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
-  train_kwargs = {"batch_size": args.batch_size}
-  test_kwargs = {"batch_size": args.test_batch_size}
-  if use_cuda:
-    cuda_kwargs = {"num_workers": 1, "pin_memory": True}
-    train_kwargs.update(cuda_kwargs)
-    test_kwargs.update(cuda_kwargs)
-    print('GPU: ' + str(torch.cuda.get_device_name(0)))
-  else:
-    print('CPU')
 
-  dataloaders = load_cifar10(test_kwargs, train_kwargs)
+  dataloaders = load_dataset('cifar10', args)
   model = Cifar10Net().to(device)
   optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
@@ -174,7 +166,7 @@ def train(args):
                         )
 
   # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
-  # trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
+  trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
   # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   model = trainer.train_and_test()
@@ -192,25 +184,27 @@ def attack_model(model):
   test_data = [test_data.dataset[i] for i in test_data.indices]
   data_shape = (1, 3, 32, 32)
 
-  model_extraction(model=model,
-                   query_limit=1000,
-                   victim_input_shape=data_shape,
-                   number_of_targets=10,
-                   attacker_input_shape=data_shape,
-                   synthesizer_name="copycat",
-                   substitute_architecture=Cifar10Net,
-                   attack_train_data=train_data,
-                   attack_test_data=test_data)
+  # model_extraction(model=model,
+  #                  query_limit=10000,
+  #                  victim_input_shape=data_shape,
+  #                  number_of_targets=10,
+  #                  attacker_input_shape=data_shape,
+  #                  synthesizer_name="copycat",
+  #                  substitute_architecture=Cifar10Net,
+  #                  attack_train_data=train_data,
+  #                  attack_test_data=test_data,
+  #                  max_epochs=30)
 
   membership_inference(model=model,
-                       query_limit=1000,
+                       query_limit=10000,
                        victim_input_shape=data_shape,
                        number_of_targets=10,
                        attacker_input_shape=data_shape,
                        synthesizer_name="copycat",
                        substitute_architecture=Cifar10Net,
                        attack_train_data=train_data,
-                       attack_test_data=test_data)
+                       attack_test_data=test_data,
+                       max_epochs=50)
 
 
 def main():
@@ -221,9 +215,12 @@ def main():
   if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
 
-  model = train(args)
+  # model = train(args)
+  model = Cifar10Net.load_from_checkpoint('./checkpoints/checkpoint-epoch=29-valid_acc=0.71.ckpt')
   attack_model(model)
 
 
 if __name__ == '__main__':
+  # ds = build_truncated_dataset(datasets.CIFAR10, "../data", train=True, download=True, indices=np.array([0]))
+  FLEnvironment()
   main()

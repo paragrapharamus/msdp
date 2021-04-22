@@ -13,7 +13,8 @@ def model_extraction(model,
                      synthesizer_name,
                      substitute_architecture,
                      attack_train_data,
-                     attack_test_data):
+                     attack_test_data,
+                     max_epochs):
   # The victim model
   model = convert_to_inference(model)
 
@@ -33,6 +34,7 @@ def model_extraction(model,
     np.prod(attacker_input_shape),
     attack_train_data,
     attack_test_data,
+    max_epochs=max_epochs
   )
   # print(attack.__dict__)
 
@@ -45,7 +47,8 @@ def membership_inference(model,
                          synthesizer_name,
                          substitute_architecture,
                          attack_train_data,
-                         attack_test_data):
+                         attack_test_data,
+                         max_epochs):
   # The victim model
   model = convert_to_inference(model)
 
@@ -64,5 +67,6 @@ def membership_inference(model,
     np.prod(attacker_input_shape),
     attack_train_data,
     attack_test_data,
+    max_epochs=max_epochs
   )
   # print(attack.__dict__)

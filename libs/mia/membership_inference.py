@@ -2,7 +2,7 @@ import torch
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 
-from datasets.dataset import *
+from datasets.dataset_util import *
 from dp.dp_optim import DPSGD
 from libs.mia.estimators import ShadowModelBundle, AttackModelBundle, prepare_attack_data
 from libs.mia.wrappers import TorchWrapper, DPTorchWrapper

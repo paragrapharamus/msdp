@@ -15,8 +15,15 @@ from torch.utils.data import DataLoader
 
 from log import Logger
 
+try:
+  from fedml_core.trainer.model_trainer import ModelTrainer
+except ImportError:
+  from libs.fedml.fedml_core.trainer.model_trainer import ModelTrainer
+
 
 class Stages(Enum):
+  """ Enumeration of the supported stages of the MSDPTrainer """
+
   STAGE_1 = 1
   """
     Input perturbation.
@@ -109,7 +116,7 @@ class Stage1(DPStage):
     if len(dataset.shape) == 2:
       norms = torch.norm(dataset, dim=1)
     elif len(dataset.shape) == 4:
-      norms = torch.linalg.norm(dataset, dim=(1,2,3))
+      norms = torch.linalg.norm(dataset, dim=(1, 2, 3))
     else:
       raise ValueError("Unknown data shape to compute the sensitivity")
     sensitivity = torch.sqrt(torch.abs(norms.max(dim=0)[0] - norms.min(dim=0)[0]))
@@ -258,12 +265,11 @@ class MSPDTrainer:
 
   def __init__(self, model: pl.LightningModule,
                optimizer: torch.optim,
-               data_loaders: DataLoader,
+               data_loaders: List[DataLoader],
                epochs: int,
                batch_size: int,
                device: torch.device,
                logger: Optional[Logger] = None):
-
     self.model = model
 
     checkpoint_callback = ModelCheckpoint(
@@ -335,7 +341,7 @@ class MSPDTrainer:
 
   def test(self):
     loader = self.data_module.test_dataloader()
-    if not(hasattr(loader, 'stage_1_attached') and loader.stage_1_attached) and Stages.STAGE_1 in self.stages:
+    if not (hasattr(loader, 'stage_1_attached') and loader.stage_1_attached) and Stages.STAGE_1 in self.stages:
       self._stage_1_noise([loader])
 
     self.trainer.test(self.model, datamodule=self.data_module)
