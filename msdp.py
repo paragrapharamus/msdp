@@ -2,7 +2,7 @@ import os
 import sys
 import types
 from enum import Enum
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Type
 
 import numpy as np
 import pytorch_lightning as pl
@@ -235,57 +235,55 @@ class Stage3(DPStage):
     return model
 
 
-class _DataModule(pl.LightningDataModule):
-
-  def __init__(self, data_loaders):
-    super().__init__()
-    if len(data_loaders) == 2:
-      self.train_loader, self.test_loader = data_loaders
-      self.val_loader = self.test_loader
-    elif len(data_loaders) == 3:
-      self.train_loader, self.val_loader, self.test_loader = data_loaders
-    else:
-      raise Exception("Invalid number of loaders")
-
-  def train_dataloader(self):
-    return self.train_loader
-
-  def val_dataloader(self):
-    return self.val_loader
-
-  def test_dataloader(self):
-    return self.test_loader
-
-
 class MSPDTrainer:
   """
   Multistage differentially private trainer
   """
   STATS_FMT = "[{:>5s}] loss: {:+.4f}, acc: {:.4f}"
 
-  def __init__(self, model: pl.LightningModule,
-               optimizer: torch.optim,
-               data_loaders: List[DataLoader],
+  def __init__(self,
+               model: pl.LightningModule,
+               data_loaders: Union[DataLoader, List[DataLoader]],
                epochs: int,
                batch_size: int,
                device: torch.device,
-               logger: Optional[Logger] = None):
+               optimizer: Optional[torch.optim.Optimizer] = None,
+               logger: Optional[Logger] = None,
+               save_checkpoint: Optional[bool] = False,
+               gpus: Optional[Union[int, List[int]]] = 1,
+               id: Optional[int] = 0):
+
+    self.id = f'MSDPTrainer_{id}'
     self.model = model
 
-    checkpoint_callback = ModelCheckpoint(
-      monitor='valid_acc_epoch',
-      dirpath=self._get_checkpoint_dir_path(),
-      filename='checkpoint-{epoch:02d}-{valid_acc:.2f}',
-      save_top_k=-1,
-      mode='max',
-    )
+    trainer_callbacks = None
+    if save_checkpoint:
+      checkpoint_callback = ModelCheckpoint(
+        monitor='valid_acc_epoch',
+        dirpath=self._get_checkpoint_dir_path(),
+        filename='checkpoint-{epoch:02d}-{valid_acc:.2f}',
+        save_top_k=-1,
+        mode='max',
+      )
+      trainer_callbacks = [checkpoint_callback]
+
     self.trainer = pl.Trainer(min_epochs=epochs,
                               max_epochs=epochs,
-                              gpus=torch.cuda.device_count(),
-                              callbacks=[checkpoint_callback])
+                              gpus=gpus,
+                              callbacks=trainer_callbacks)
+
     self.optimizer = optimizer
 
-    self.data_module = _DataModule(data_loaders)
+    if isinstance(data_loaders, DataLoader):
+      self.train_loader = data_loaders
+    elif len(data_loaders) == 1:
+      self.train_loader = data_loaders[0]
+    elif len(data_loaders) == 2:
+      self.train_loader, self.test_loader = data_loaders
+    elif len(data_loaders) == 3:
+      self.train_loader, self.val_loader, self.test_loader = data_loaders
+    else:
+      raise Exception("Invalid number of loaders")
 
     self.epochs = epochs
     self.batch_size = batch_size
@@ -316,22 +314,34 @@ class MSPDTrainer:
     return (preds == labels).mean()
 
   def log(self, *msg):
-    self.logger.log(*msg, module='MSPDTrainer')
+    self.logger.log(*msg, module=self.id)
+
+  def log_warning(self, *msg):
+    self.logger.log_waring(*msg, module=self.id)
 
   def train(self):
+
+    self.model.to(self.device)
+
+    if not self.optimizer:
+      self.log_warning("Using a default optimizer. Please provide an optimizer for personalized training")
+      self.optimizer = self.model.default_optimizer()
 
     for _, stage in self.stages.items():
       stage.add_logger(self.logger)
 
+    loaders = [self.train_loader]
+    if hasattr(self, 'val_loader'):
+      loaders.append(self.val_loader)
+
     # Inject noise to data
-    if Stages.STAGE_1 in self.stages:
-      self._stage_1_noise([self.data_module.train_dataloader(), self.data_module.val_dataloader()])
+    if Stages.STAGE_1 in self.stages and not hasattr(self.train_loader, 'stage_1_attached'):
+      self._stage_1_noise(loaders)
 
     # Wrap the optimizer to perform DP training
-    if Stages.STAGE_2 in self.stages:
-      self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device))
+    self._wrap_stage_2()
 
-    self.trainer.fit(self.model, datamodule=self.data_module)
+    self.trainer.fit(self.model, *loaders)
 
     # Inject noise to model's weights
     if Stages.STAGE_3 in self.stages:
@@ -340,16 +350,21 @@ class MSPDTrainer:
     return self.model
 
   def test(self):
-    loader = self.data_module.test_dataloader()
-    if not (hasattr(loader, 'stage_1_attached') and loader.stage_1_attached) and Stages.STAGE_1 in self.stages:
-      self._stage_1_noise([loader])
+    if hasattr(self, 'test_loader'):
+      loader = self.test_loader
+      if not (hasattr(loader, 'stage_1_attached') and loader.stage_1_attached) and Stages.STAGE_1 in self.stages:
+        self._stage_1_noise([loader])
 
-    self.trainer.test(self.model, datamodule=self.data_module)
+      self.trainer.test(self.model, loader)
 
   def train_and_test(self):
     model = self.train()
     self.test()
     return model
+
+  def update_optimizer(self, optimizer):
+    self.optimizer = optimizer
+    self._wrap_stage_2()
 
   @staticmethod
   def _get_checkpoint_dir_path():
@@ -366,6 +381,10 @@ class MSPDTrainer:
     for i, loader in enumerate(loaders):
       self.stages[Stages.STAGE_1].apply(loader)
 
+  def _wrap_stage_2(self):
+    if Stages.STAGE_2 in self.stages:
+      self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device))
+
   def _stage_3_noise(self):
-    train_loader = self.data_module.train_dataloader()
-    self.stages[Stages.STAGE_3].apply(self.model, len(train_loader.dataset), self.epochs, self.batch_size)
+    train_dataset_size = len(self.train_loader.dataset)
+    self.stages[Stages.STAGE_3].apply(self.model, train_dataset_size, self.epochs, self.batch_size)

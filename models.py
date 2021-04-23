@@ -18,7 +18,7 @@ class BaseNet(pl.LightningModule):
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
-    loss = F.cross_entropy(output, targets)
+    loss = self.loss_fn(output, targets)
     self.manual_backward(loss, opt)
     opt.step()
     self.log('train_acc', self.train_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=False)
@@ -29,7 +29,7 @@ class BaseNet(pl.LightningModule):
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
-    loss = F.cross_entropy(output, targets)
+    loss = self.loss_fn(output, targets)
     self.log('valid_acc', self.valid_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
     self.log('valid_loss', loss, on_step=True, on_epoch=True)
 
@@ -37,8 +37,8 @@ class BaseNet(pl.LightningModule):
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
-    loss = F.cross_entropy(output, targets)
-    self.log('test_acc', self.test_acc(torch.argmax(output, 1), targets),  on_step=True, on_epoch=True)
+    loss = self.loss_fn(output, targets)
+    self.log('test_acc', self.test_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
     self.log('test_loss', loss, on_step=True, on_epoch=False)
 
   def add_optimizer(self, optimizer):
@@ -48,8 +48,15 @@ class BaseNet(pl.LightningModule):
     if hasattr(self, "_optimizer"):
       optimizer = self._optimizer
     else:
-      optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+      optimizer = self.default_optimizer()
     return optimizer
+
+  def default_optimizer(self):
+    return torch.optim.Adam(self.parameters(), lr=1e-3)
+
+  @staticmethod
+  def compute_loss(output, targets):
+    return F.cross_entropy(output, targets)
 
 
 class Cifar10Net(BaseNet):

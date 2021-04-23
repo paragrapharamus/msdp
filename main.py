@@ -2,9 +2,11 @@ import argparse
 
 import pytorch_lightning as pl
 import torch
+from torch.utils.data import random_split
 
 from attacks import model_extraction, membership_inference
 from datasets.dataset_util import *
+from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
 from models import Cifar10Net
 from msdp import MSPDTrainer, Stages
@@ -215,12 +217,27 @@ def main():
   if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
 
-  # model = train(args)
-  model = Cifar10Net.load_from_checkpoint('./checkpoints/checkpoint-epoch=29-valid_acc=0.71.ckpt')
-  attack_model(model)
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
 
+  FLEnvironment(model_class=Cifar10Net,
+                dataset_name='cifar10',
+                dataset_root='../data/',
+                num_clients=2,
+                aggregator_class=Aggregator,
+                rounds=1,
+                device=device,
+                client_optimizer_class=torch.optim.SGD,
+                clients_per_round=0,
+                client_local_test_split=False,
+                args=args)
+
+  # model = train(args)
+  # model = Cifar10Net.load_from_checkpoint('./checkpoints/checkpoint-epoch=29-valid_acc=0.71.ckpt')
+  # attack_model(model)
+
+
+from copy import deepcopy
 
 if __name__ == '__main__':
-  # ds = build_truncated_dataset(datasets.CIFAR10, "../data", train=True, download=True, indices=np.array([0]))
-  FLEnvironment()
   main()

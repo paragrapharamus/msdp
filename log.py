@@ -23,3 +23,7 @@ class Logger:
   def log(self, *message, module=''):
     for file in self.log_files:
       print(f'[{module}]', *message, file=file)
+
+  def log_waring(self, *message, module=''):
+    self.log(*message, module)
+    print(f'[{module}]', *message, file=sys.stderr)

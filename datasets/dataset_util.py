@@ -101,7 +101,11 @@ def build_truncated_dataset(dataset_name: str,
     def __init__(self, root, indices, train=True, download=True, transform=None):
       super(TruncatedDataset, self).__init__(root, train=train, download=download, transform=transform)
       self.data = self.data[indices]
-      self.targets = np.array(self.targets)[indices]
+      if isinstance(self.targets, np.ndarray):
+        self.target = self.targets[indices]
+      else:
+        # list
+        self.targets = np.array(self.targets)[indices]
       self.dataset_class = dataset_class
 
   return TruncatedDataset(root, indices, train, download, transform)
