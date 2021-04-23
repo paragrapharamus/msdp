@@ -61,8 +61,9 @@ class Client:
       self.model_trainer.attach_stage(Stages.STAGE_3, {'eps': eps3,
                                                        'max_weight_norm': max_weight_norm})
 
+  # noinspection PyArgumentList
   def update_model(self, parameters):
-    model_params = self.model_trainer.model.params()
+    model_params = list(self.model_trainer.model.parameters())
     for i, param in enumerate(parameters):
       model_params[i].data.copy_(param.data)
     if self.optimizer_momentum:

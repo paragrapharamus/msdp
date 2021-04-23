@@ -10,7 +10,7 @@ class BaseNet(pl.LightningModule):
     return False
 
   def forward(self, x):
-    return self.classifier(x.float()).view(-1, 10)
+    return self.classifier(x).view(-1, 10)
 
   def training_step(self, batch, batch_idx):
     opt = self.optimizers()
@@ -18,7 +18,7 @@ class BaseNet(pl.LightningModule):
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
-    loss = self.loss_fn(output, targets)
+    loss = self.compute_loss(output, targets)
     self.manual_backward(loss, opt)
     opt.step()
     self.log('train_acc', self.train_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=False)
@@ -29,7 +29,7 @@ class BaseNet(pl.LightningModule):
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
-    loss = self.loss_fn(output, targets)
+    loss = self.compute_loss(output, targets)
     self.log('valid_acc', self.valid_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
     self.log('valid_loss', loss, on_step=True, on_epoch=True)
 
@@ -37,7 +37,7 @@ class BaseNet(pl.LightningModule):
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
-    loss = self.loss_fn(output, targets)
+    loss = self.compute_loss(output, targets)
     self.log('test_acc', self.test_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
     self.log('test_loss', loss, on_step=True, on_epoch=False)
 

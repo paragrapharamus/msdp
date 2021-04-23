@@ -123,7 +123,7 @@ class FLEnvironment:
       client = Client(id=client_id,
                       model_class=model_class,
                       dataloaders=dataloaders,
-                      epochs=self.args.epochs,
+                      epochs=1,#self.args.epochs,
                       batch_size=self.args.batch_size,
                       optimizer_class=optimizer_class,
                       learning_rate=self.args.lr,

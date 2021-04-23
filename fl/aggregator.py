@@ -22,7 +22,7 @@ class Aggregator:
     self.model = None
     self.clients = clients
     self.clients_per_round = clients_per_round
-    self.current_round_clients = set()
+    self.current_round_clients = []
     self.total_training_data_size = total_training_data_size
     self.test_dataloader = test_dataloader
     self.rounds = rounds
@@ -41,20 +41,24 @@ class Aggregator:
       self._aggregate_models()
 
   def test(self):
-    acc = []
+    accuracies = []
     losses = []
+    self.model.to(self.device)
     with torch.no_grad():
       for data, targets in self.test_dataloader:
         data, targets = data.to(self.device), targets.to(self.device)
         output = self.model(data)
         losses.append(self.model.compute_loss(output, targets).item())
-        acc.append((torch.argmax(output, 1) == targets).float().sum())
-    print(f"Global model test accuracy: {acc:.3f}")
+        acc = (torch.argmax(output, 1) == targets).float().sum().cpu()
+        accuracies.append(acc)
+    accuracies = np.array(accuracies)
+    losses = np.array(losses)
+    print(f"Global model test accuracy: {np.array(accuracies).mean():.3f}")
 
   def _send_model_and_train(self):
     for client in self.current_round_clients:
-      params = deepcopy(self.model.parameters())
-      client.update(params)
+      params = deepcopy(list(self.model.parameters()))
+      client.update_model(params)
       client.train()
 
   def _aggregate_models(self):

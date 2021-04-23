@@ -137,7 +137,7 @@ class Stage2(DPStage):
     self.max_grad_norm = max_grad_norm
     self.steps = 0
 
-  def apply(self, model: nn.Module, optimizer: torch.optim, device: torch.device) -> torch.optim:
+  def apply(self, model: nn.Module, optimizer: torch.optim.Optimizer, device: torch.device) -> torch.optim.Optimizer:
     self.model = model
     self.device = device
     # Opacus
@@ -149,6 +149,11 @@ class Stage2(DPStage):
 
     self.clipper = PerSampleGradientClipper(self.model, norm_clipper)
 
+    optimizer = self.wrap_optimizer(optimizer)
+    optimizer.stage_2_attached = True
+    return optimizer
+
+  def wrap_optimizer(self, optimizer):
     def dp_zero_grad(self):
       self.dpstage._zero_grad()
       self.original_zero_grad()
@@ -163,7 +168,6 @@ class Stage2(DPStage):
 
     optimizer.original_zero_grad = optimizer.zero_grad
     optimizer.zero_grad = types.MethodType(dp_zero_grad, optimizer)
-
     return optimizer
 
   def _zero_grad(self):
@@ -339,7 +343,13 @@ class MSPDTrainer:
       self._stage_1_noise(loaders)
 
     # Wrap the optimizer to perform DP training
-    self._wrap_stage_2()
+    if Stages.STAGE_2 in self.stages:
+      # Attach stage 2 only once (add the model hooks), but update the optimizer
+      # each time the model has been externally updated
+      if hasattr(self.optimizer, 'stage_2_attached'):
+        self.model.add_optimizer(self.stages[Stages.STAGE_2].wrap_optimizer(self.optimizer))
+      else:
+        self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device))
 
     self.trainer.fit(self.model, *loaders)
 
@@ -364,7 +374,6 @@ class MSPDTrainer:
 
   def update_optimizer(self, optimizer):
     self.optimizer = optimizer
-    self._wrap_stage_2()
 
   @staticmethod
   def _get_checkpoint_dir_path():
@@ -380,10 +389,6 @@ class MSPDTrainer:
   def _stage_1_noise(self, loaders):
     for i, loader in enumerate(loaders):
       self.stages[Stages.STAGE_1].apply(loader)
-
-  def _wrap_stage_2(self):
-    if Stages.STAGE_2 in self.stages:
-      self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device))
 
   def _stage_3_noise(self):
     train_dataset_size = len(self.train_loader.dataset)
