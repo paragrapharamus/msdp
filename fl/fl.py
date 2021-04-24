@@ -1,3 +1,4 @@
+import sys
 from copy import deepcopy
 from typing import Optional, Tuple, Type, List, Dict, Union
 
@@ -12,6 +13,8 @@ import pytorch_lightning as pl
 
 from pytorch_lightning import LightningModule
 
+from log import Logger
+
 
 class FLEnvironment:
   """ Federeated Learning simulated Environment
@@ -20,16 +23,18 @@ class FLEnvironment:
 
   def __init__(self,
                model_class: Type[pl.LightningModule],
-               dataset_name: str,
-               dataset_root: str,
+               train_dataset: Dataset,
+               test_dataset: Dataset,
                num_clients: int,
                aggregator_class: Type[Aggregator],
                rounds: int,
                device: torch.device,
                client_optimizer_class: Type[torch.optim.Optimizer],
-               alpha: Optional[float] = 0.5,
+               partition_method: Optional[str] = 'heterogeneous',
+               alpha: Optional[float] = 1,
                clients_per_round: Optional[int] = 0,
                client_local_test_split: Optional[Union[bool, float]] = False,
+               logger: Optional[Logger] = None,
                args=None):
 
     self.num_clients = num_clients
@@ -38,8 +43,12 @@ class FLEnvironment:
     self.device = device
     self.args = args
 
-    # Allocate data for each client
-    training_data_splits, global_test_data, n_training_data = self._split_dataset(dataset_name, dataset_root)
+    self.logger = logger
+    if logger is None:
+      self.logger = Logger([sys.stdout, './msdp.log'])
+
+    # Allocate data for each client and ge the global val/test splits
+    training_data_splits, val_dataset = self._split_dataset(train_dataset, partition_method)
 
     # Build the global test dataloader
     self.use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -49,31 +58,38 @@ class FLEnvironment:
       cuda_kwargs = {"num_workers": 1, "pin_memory": True}
       train_kwargs.update(cuda_kwargs)
       test_kwargs.update(cuda_kwargs)
-    test_loader = DataLoader(global_test_data, **test_kwargs)
+    val_loader = DataLoader(val_dataset, **train_kwargs)
+    test_loader = DataLoader(test_dataset, **test_kwargs)
 
     # Initialize the clients
-    self.clients = self._init_clients(model_class, client_optimizer_class, training_data_splits,
-                                      client_local_test_split, train_kwargs, test_kwargs)
+    self.clients, n_training_data = self._init_clients(model_class, client_optimizer_class, training_data_splits,
+                                                       client_local_test_split, train_kwargs, test_kwargs)
     clients_per_round = clients_per_round if clients_per_round > 0 else len(self.clients)
 
     # Initialize the aggregator
     self.aggregator = aggregator_class(model_class=model_class,
                                        clients=self.clients,
                                        clients_per_round=clients_per_round,
+                                       val_dataloader=val_loader,
                                        test_dataloader=test_loader,
                                        total_training_data_size=n_training_data,
                                        rounds=rounds,
-                                       device=device)
+                                       device=device,
+                                       logger=self.logger)
 
     # Start the FL simulation
+    self.log("FL simulation started...")
     self.aggregator.train_and_test()
+
+  def log(self, *msg):
+    self.logger.log(*msg, module='FLEnv')
 
   def _init_clients(self, model_class: Type[pl.LightningModule],
                     optimizer_class: torch.optim,
                     training_data_splits: Dict[int, Dataset],
                     client_local_test_split: bool,
                     train_kwargs: dict,
-                    test_kwargs: dict) -> List[Client]:
+                    test_kwargs: dict) -> Tuple[List[Client], int]:
     """
     Creates the client instances with the specified parameters
 
@@ -83,47 +99,30 @@ class FLEnvironment:
     :param client_local_test_split:
     :param train_kwargs:
     :param test_kwargs:
-    :return: The list of clients
+    :return: The list of clients and the total number of training datapoints
     """
-
-    def get_dataloader(dataset, indices, kwargs):
-      dataset.data = dataset.data[indices]
-      dataset.targets = dataset.targets[indices]
-      return DataLoader(dataset, **kwargs)
-
+    self.log("Creating the clients...")
     clients = []
+    n_training_data = 0
     for client_id in range(self.num_clients):
       # Create the data loaders
       client_dataset = training_data_splits[client_id]
 
+      # Generate local test splits
       if client_local_test_split:
-        dataset_size = len(client_dataset)
-        if isinstance(client_local_test_split, bool):
-          test_split_ratio = 0.1
-        else:
-          test_split_ratio = client_local_test_split \
-            if client_local_test_split < 0.5 \
-            else 1 - client_local_test_split
-
-        # The data is already shuffled so we can simply split it.
-        split_index = int(dataset_size * test_split_ratio)
-
-        test_dataset = deepcopy(client_dataset)
-        test_indices = np.array(range(split_index))
-        test_loader = get_dataloader(test_dataset, test_indices, test_kwargs)
-
-        train_indices = np.array(range(split_index, dataset_size))
-        train_dataset = client_dataset
-        train_loader = get_dataloader(train_dataset, train_indices, train_kwargs)
-
+        train_dataset, test_dataset = self._train_test_split(client_dataset, client_local_test_split)
+        train_loader = DataLoader(train_dataset, **train_kwargs)
+        test_loader = DataLoader(test_dataset, **test_kwargs)
         dataloaders = [train_loader, test_loader]
+        n_training_data += len(train_dataset)
       else:
         dataloaders = DataLoader(client_dataset, **train_kwargs)
+        n_training_data += len(client_dataset)
 
       client = Client(id=client_id,
                       model_class=model_class,
                       dataloaders=dataloaders,
-                      epochs=1,#self.args.epochs,
+                      epochs=1,  # self.args.epochs,
                       batch_size=self.args.batch_size,
                       optimizer_class=optimizer_class,
                       learning_rate=self.args.lr,
@@ -134,42 +133,80 @@ class FLEnvironment:
                       noise_multiplier=self.args.noise_multiplier,
                       max_grad_norm=self.args.max_grad_norm,
                       eps3=self.args.eps3,
-                      max_weight_norm=self.args.max_weight_norm)
+                      max_weight_norm=self.args.max_weight_norm,
+                      logger=self.logger,
+                      experiment_id=self.args.experiment_id)
       clients.append(client)
-    return clients
+    return clients, n_training_data
 
-  def _split_dataset(self, dataset_name: str, dataset_root: str):
+  @staticmethod
+  def _train_test_split(dataset, test_split_ratio, shuffle=False):
+
+    def truncate_dataset(ds, idxs):
+      ds.data = ds.data[idxs]
+      ds.targets = ds.targets[idxs]
+      return ds
+
+    dataset_size = len(dataset)
+    if isinstance(test_split_ratio, bool):
+      test_split_ratio = 0.1
+    else:
+      # make sure the smaller fraction is for the test split
+      test_split_ratio = test_split_ratio \
+        if test_split_ratio < 0.5 \
+        else 1 - test_split_ratio
+
+    if shuffle:
+      indices = np.random.permutation(dataset_size)
+      dataset.data = dataset.data[indices]
+      if not isinstance(dataset.targets, np.ndarray):
+        dataset.targets = np.array(dataset.targets)
+      dataset.targets = dataset.targets[indices]
+
+    split_index = int(dataset_size * test_split_ratio)
+    # Get the test data split
+    test_indices = np.array(range(split_index))
+    test_dataset = truncate_dataset(deepcopy(dataset), test_indices)
+    # Get the train data split
+    train_indices = np.array(range(split_index, dataset_size))
+    train_dataset = truncate_dataset(dataset, train_indices)
+    return train_dataset, test_dataset
+
+  def _split_dataset(self, train_dataset: Dataset, partition_method: str) -> Tuple[Dict[int, Dataset], Dataset]:
     """
     Fetches and splits the training dataset foe each client
 
-    :param dataset_name: the name of the dataset
-    :param dataset_root: the root location of the dataset used to load or download it
-    :return: the splits dictionary: dict[int, TruncatedDataset] and the global test dataset
+    :param train_dataset: the training dataset
+    :param partition_method: 'homogeneous' or 'heterogeneous'
+    :return: * split data for each client id
+             * the validation data split
     """
-    train_dataset, test_dataset, allocation, _, n_train_data = self._allocate_data(dataset_name,
-                                                                                   self.num_clients,
-                                                                                   alpha=self.alpha)
+    train_dataset, val_dataset, allocation, _ = self._allocate_data(train_dataset,
+                                                                    self.num_clients,
+                                                                    partition_method=partition_method,
+                                                                    alpha=self.alpha)
     splits = {}
-    transform = get_dataset_transform(dataset_name)[0]
+    self.log('Building client datasets...')
     for split_id in range(self.num_clients):
-      splits[split_id] = build_truncated_dataset(dataset_name, dataset_root, train=True,
-                                                 transform=transform, download=True,
-                                                 indices=allocation[split_id])
+      ds = deepcopy(train_dataset)
+      ds.data = ds.data[allocation[split_id]]
+      ds.targets = ds.targets[allocation[split_id]]
+      splits[split_id] = ds
 
-    return splits, test_dataset, n_train_data
+    return splits, val_dataset
 
-  @staticmethod
-  def _allocate_data(dataset_name: str,
+  def _allocate_data(self,
+                     train_dataset: Dataset,
                      num_of_splits: int,
                      partition_method: Optional[str] = 'heterogeneous',
                      alpha: Optional[float] = 0.5):
     """
-    Allocates the data into a given number of splits
+    Allocates the training data into a given number of splits, keeping a validation split
 
     Based on FedML partition method https://github.com/FedML-AI/FedML
 
-    :param dataset_name: the name of the dataset to be split
-    :param partition_method: 'homogenous' or 'heterogeneous'
+    :param train_dataset: the training dataset
+    :param partition_method: 'homogeneous' or 'heterogeneous'
     :param num_of_splits: the number of splits in which the data is partitioned
     :param alpha: Dirichlet distribution concentration parameter. Controls the data distribution
                   among clients. See https://arxiv.org/pdf/1909.06335.pdf
@@ -177,11 +214,14 @@ class FLEnvironment:
     :return: The allocation dictionary dict[split_id, np.ndarray[indices]]
     """
     # Get the dataset
-    train_dataset, test_dataset = get_dataset(dataset_name, validation_dataset=False)
-    train_dataset.targets = np.array(train_dataset.targets)
+    train_dataset, val_dataset = self._train_test_split(train_dataset, 0.1, True)
+
+    train_dataset.targets = train_dataset.targets
     training_dataset_size = len(train_dataset.data)
     num_classes = len(train_dataset.classes)
-    print("[FLEnv] Allocating data")
+
+    self.log(f'Train data size: {training_dataset_size}, Global Val data size: {len(val_dataset.data)}')
+    self.log(f"Allocating data using {partition_method} splits...")
     if partition_method == "heterogeneous":
       min_size = 0
       id2idxs = {}  # the allocation dictionary
@@ -206,12 +246,11 @@ class FLEnvironment:
         np.random.shuffle(split_indices[split_idx])
         id2idxs[split_idx] = np.array(split_indices[split_idx])
 
-    elif partition_method == "homogenous":
+    elif partition_method == "homogeneous":
       indices = np.random.permutation(training_dataset_size)
       split_indices = np.array_split(indices, num_of_splits)
       id2idxs = {i: np.array(split_indices[i]) for i in range(num_of_splits)}
 
     else:
       raise ValueError("Invalid partition method")
-
-    return train_dataset, test_dataset, id2idxs, num_classes, len(train_dataset.data)
+    return train_dataset, val_dataset, id2idxs, num_classes

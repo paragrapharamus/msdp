@@ -10,15 +10,11 @@ import torch
 from opacus import PerSampleGradientClipper
 from opacus.utils import clipping
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import TensorBoardLogger
 from torch import nn
 from torch.utils.data import DataLoader
 
 from log import Logger
-
-try:
-  from fedml_core.trainer.model_trainer import ModelTrainer
-except ImportError:
-  from libs.fedml.fedml_core.trainer.model_trainer import ModelTrainer
 
 
 class Stages(Enum):
@@ -67,16 +63,18 @@ class DPStage:
   def __init__(self, stage):
     self.stage = stage
     self.logger = None
+    self.module = None
 
   def apply(self, *args, **kwargs):
     pass
 
-  def add_logger(self, logger: Logger):
+  def add_logger(self, logger: Logger, parent_module: str):
     self.logger = logger
+    self.module = f'{parent_module}->{self.stage}'
 
   def log(self, *msg):
     if self.logger is not None:
-      self.logger.log(*msg, module=self.stage)
+      self.logger.log(*msg, module=self.module)
 
 
 class Stage1(DPStage):
@@ -255,26 +253,30 @@ class MSPDTrainer:
                logger: Optional[Logger] = None,
                save_checkpoint: Optional[bool] = False,
                gpus: Optional[Union[int, List[int]]] = 1,
-               id: Optional[int] = 0):
+               id: Optional[int] = 0,
+               experiment_id: Optional[int] = None):
 
     self.id = f'MSDPTrainer_{id}'
     self.model = model
 
-    trainer_callbacks = None
+    self.trainer_callbacks = None
     if save_checkpoint:
       checkpoint_callback = ModelCheckpoint(
         monitor='valid_acc_epoch',
-        dirpath=self._get_checkpoint_dir_path(),
+        dirpath=self._get_next_available_dir(os.getcwd(), 'checkpoints'),
         filename='checkpoint-{epoch:02d}-{valid_acc:.2f}',
         save_top_k=-1,
         mode='max',
       )
-      trainer_callbacks = [checkpoint_callback]
+      self.trainer_callbacks = [checkpoint_callback]
 
-    self.trainer = pl.Trainer(min_epochs=epochs,
-                              max_epochs=epochs,
-                              gpus=gpus,
-                              callbacks=trainer_callbacks)
+    self.trainer = None
+
+    # creating the TensorBoard logging
+    __logs_dir = './lightning_logs'
+    if not experiment_id:
+      experiment_id = self._get_next_available_dir(__logs_dir, 'experiment', False, False)
+    self.tensorboardlogger = TensorBoardLogger(save_dir=__logs_dir, version=self.id, name=experiment_id)
 
     self.optimizer = optimizer
 
@@ -292,6 +294,7 @@ class MSPDTrainer:
     self.epochs = epochs
     self.batch_size = batch_size
     self.device = device
+    self.gpus = gpus
     self.steps = 0
 
     self.stages = dict()
@@ -311,11 +314,8 @@ class MSPDTrainer:
                                        stage_param_dict['max_weight_norm'])
     else:
       raise ValueError("Unknown stage type.")
+    self.stages[stage_type].add_logger(self.logger)
     self.log(f"{stage_type} successfully attached.")
-
-  @staticmethod
-  def accuracy(preds: np.ndarray, labels: np.ndarray):
-    return (preds == labels).mean()
 
   def log(self, *msg):
     self.logger.log(*msg, module=self.id)
@@ -324,15 +324,19 @@ class MSPDTrainer:
     self.logger.log_waring(*msg, module=self.id)
 
   def train(self):
+    self.log(f"Started training...")
+    self.trainer = pl.Trainer(min_epochs=self.epochs,
+                              max_epochs=self.epochs,
+                              gpus=self.gpus,
+                              weights_summary=None,
+                              logger=self.tensorboardlogger,
+                              callbacks=self.trainer_callbacks)
 
     self.model.to(self.device)
 
     if not self.optimizer:
       self.log_warning("Using a default optimizer. Please provide an optimizer for personalized training")
       self.optimizer = self.model.default_optimizer()
-
-    for _, stage in self.stages.items():
-      stage.add_logger(self.logger)
 
     loaders = [self.train_loader]
     if hasattr(self, 'val_loader'):
@@ -351,21 +355,28 @@ class MSPDTrainer:
       else:
         self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device))
 
-    self.trainer.fit(self.model, *loaders)
+    results = self.trainer.fit(self.model, *loaders)
+    if results != 1:
+      self.log(f"Train+Validation Results: {results}")
 
     # Inject noise to model's weights
     if Stages.STAGE_3 in self.stages:
       self._stage_3_noise()
 
+    self.model.cpu()
     return self.model
 
   def test(self):
     if hasattr(self, 'test_loader'):
+      self.log("Started testing...")
       loader = self.test_loader
       if not (hasattr(loader, 'stage_1_attached') and loader.stage_1_attached) and Stages.STAGE_1 in self.stages:
         self._stage_1_noise([loader])
 
-      self.trainer.test(self.model, loader)
+      self.model.to(self.device)
+      results = self.trainer.test(self.model, loader)
+      self.model.cpu()
+      self.log(f"Test results: {results}")
 
   def train_and_test(self):
     model = self.train()
@@ -376,15 +387,19 @@ class MSPDTrainer:
     self.optimizer = optimizer
 
   @staticmethod
-  def _get_checkpoint_dir_path():
-    checkpoint_dir_base = os.path.join(os.getcwd(), 'checkpoints')
-    checkpoint_dir = checkpoint_dir_base
+  def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
+    checkpoint_dir_base = os.path.join(root, dir_name)
     dir_id = 1
+    checkpoint_dir = f"{checkpoint_dir_base}_{dir_id}"
     while os.path.exists(checkpoint_dir):
-      checkpoint_dir = f"{checkpoint_dir_base}_{dir_id}"
       dir_id += 1
-    os.mkdir(checkpoint_dir)
-    return checkpoint_dir
+      checkpoint_dir = f"{checkpoint_dir_base}_{dir_id}"
+    if create:
+      os.mkdir(checkpoint_dir)
+    if absolute_path:
+      return checkpoint_dir
+    else:
+      return f"{dir_name}_{dir_id}"
 
   def _stage_1_noise(self, loaders):
     for i, loader in enumerate(loaders):

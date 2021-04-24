@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import pytorch_lightning as pl
 import torch
@@ -220,16 +221,20 @@ def main():
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
+  train_dataset, test_dataset = get_dataset('cifar10', False)
+  args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
   FLEnvironment(model_class=Cifar10Net,
-                dataset_name='cifar10',
-                dataset_root='../data/',
+                train_dataset=train_dataset,
+                test_dataset=test_dataset,
                 num_clients=2,
                 aggregator_class=Aggregator,
                 rounds=1,
                 device=device,
                 client_optimizer_class=torch.optim.SGD,
                 clients_per_round=0,
-                client_local_test_split=False,
+                client_local_test_split=0.1,
+                partition_method='homogeneous',
+                alpha=10,
                 args=args)
 
   # model = train(args)
@@ -237,7 +242,20 @@ def main():
   # attack_model(model)
 
 
-from copy import deepcopy
+def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
+  checkpoint_dir_base = os.path.join(root, dir_name)
+  dir_id = 1
+  checkpoint_dir = f"{checkpoint_dir_base}_{dir_id}"
+  while os.path.exists(checkpoint_dir):
+    dir_id += 1
+    checkpoint_dir = f"{checkpoint_dir_base}_{dir_id}"
+  if create:
+    os.mkdir(checkpoint_dir)
+  if absolute_path:
+    return checkpoint_dir
+  else:
+    return f"{dir_name}_{dir_id}"
+
 
 if __name__ == '__main__':
   main()

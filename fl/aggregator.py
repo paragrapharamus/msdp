@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from fl.client import Client
+from log import Logger
 
 
 class Aggregator:
@@ -14,9 +15,11 @@ class Aggregator:
                clients: List[Client],
                clients_per_round: int,
                total_training_data_size: int,
+               val_dataloader: DataLoader,
                test_dataloader: DataLoader,
                rounds: int,
-               device: torch.device):
+               device: torch.device,
+               logger: Optional[Logger] = None):
 
     self.model_class = model_class
     self.model = None
@@ -25,41 +28,47 @@ class Aggregator:
     self.current_round_clients = []
     self.total_training_data_size = total_training_data_size
     self.test_dataloader = test_dataloader
+    self.val_dataloader = val_dataloader
     self.rounds = rounds
     self.device = device
+    self.logger = logger
 
   def train_and_test(self):
     self.train()
-    self.test()
+    self.log("Testing... ")
+    self.test(self.test_dataloader)
 
   def train(self):
     self.model = self.model_class()
 
     for r in range(self.rounds):
+      self.log(f'******** ROUND {r + 1} ********')
       self._select_clients(r)
       self._send_model_and_train()
       self._aggregate_models()
+      self.log("Validation... ")
+      self.test(self.val_dataloader)
 
-  def test(self):
-    accuracies = []
+  def test(self, loader):
     losses = []
     self.model.to(self.device)
     with torch.no_grad():
-      for data, targets in self.test_dataloader:
+      correct = 0
+      for data, targets in loader:
         data, targets = data.to(self.device), targets.to(self.device)
         output = self.model(data)
         losses.append(self.model.compute_loss(output, targets).item())
-        acc = (torch.argmax(output, 1) == targets).float().sum().cpu()
-        accuracies.append(acc)
-    accuracies = np.array(accuracies)
-    losses = np.array(losses)
-    print(f"Global model test accuracy: {np.array(accuracies).mean():.3f}")
+        correct += (torch.argmax(output, 1) == targets).float().sum()
+      accuracy = correct / len(loader.dataset)
+      self.log(f"Global model accuracy: {accuracy:.3f}")
+    self.model.cpu()
 
   def _send_model_and_train(self):
     for client in self.current_round_clients:
       params = deepcopy(list(self.model.parameters()))
       client.update_model(params)
       client.train()
+      client.test()
 
   def _aggregate_models(self):
     global_model_contribution_weight = 0
@@ -85,3 +94,7 @@ class Aggregator:
     client_indexes = np.random.choice(range(len(self.clients)), self.clients_per_round, replace=False)
     self.current_round_clients = [self.clients[i] for i in client_indexes]
     return self.current_round_clients
+
+  def log(self, *msg):
+    if self.logger:
+      self.logger.log(*msg, module='Aggregator')

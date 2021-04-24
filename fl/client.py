@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from pytorch_lightning import LightningModule
 from torch.utils.data import Dataset
 
+from log import Logger
 from msdp import MSPDTrainer, Stages
 
 
@@ -23,7 +24,9 @@ class Client:
                noise_multiplier: Optional[float] = None,
                max_grad_norm: Optional[float] = None,
                eps3: Optional[float] = None,
-               max_weight_norm: Optional[float] = None):
+               max_weight_norm: Optional[float] = None,
+               logger: Optional[Logger] = None,
+               experiment_id: Optional[int] = 0):
     self.id = id
     self.model_class = model_class
     self.device = device
@@ -43,23 +46,28 @@ class Client:
     self.weight_decay = weight_decay
     self.optimizer_momentum = optimizer_momentum
 
+    self.logger = logger
+    self.log(f"Client {self.id} initiated")
+
     # Create the MSDP trainer
     self.model_trainer = MSPDTrainer(model=self.model_class(),
                                      data_loaders=dataloaders,
                                      epochs=epochs,
                                      batch_size=batch_size,
                                      device=device,
-                                     id=id)
+                                     id=id,
+                                     logger=logger,
+                                     experiment_id=experiment_id)
 
     # Attach the DP Stages if their parameters are provided
-    if eps1:
-      self.model_trainer.attach_stage(Stages.STAGE_1, {'eps': eps1})
-    if noise_multiplier or max_grad_norm:
-      self.model_trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': noise_multiplier,
-                                                       'max_grad_norm': max_grad_norm})
-    if eps3:
-      self.model_trainer.attach_stage(Stages.STAGE_3, {'eps': eps3,
-                                                       'max_weight_norm': max_weight_norm})
+    # if eps1:
+    #   self.model_trainer.attach_stage(Stages.STAGE_1, {'eps': eps1})
+    # if noise_multiplier or max_grad_norm:
+    #   self.model_trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': noise_multiplier,
+    #                                                    'max_grad_norm': max_grad_norm})
+    # if eps3:
+    #   self.model_trainer.attach_stage(Stages.STAGE_3, {'eps': eps3,
+    #                                                    'max_weight_norm': max_weight_norm})
 
   # noinspection PyArgumentList
   def update_model(self, parameters):
@@ -71,7 +79,7 @@ class Client:
                                        weight_decay=self.weight_decay,
                                        momentum=self.optimizer_momentum)
     else:
-      optimizer = self.optimizer_class(model_params,  lr=self.learning_rate,
+      optimizer = self.optimizer_class(model_params, lr=self.learning_rate,
                                        weight_decay=self.weight_decay)
     self.model_trainer.update_optimizer(optimizer)
 
@@ -83,3 +91,6 @@ class Client:
 
   def test(self):
     self.model_trainer.test()
+
+  def log(self, *msg):
+    self.logger.log(*msg, module=f'Client_{self.id}')
