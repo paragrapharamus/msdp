@@ -1,8 +1,8 @@
 import numpy as np
-from privacyraven.extraction.core import ModelExtractionAttack
-from privacyraven.membership_inf.core import TransferMembershipInferenceAttack
-from privacyraven.utils.query import get_target
-from privacyraven.models.victim import convert_to_inference
+from libs.PrivacyRaven.src.privacyraven.extraction.core import ModelExtractionAttack
+from libs.PrivacyRaven.src.privacyraven.membership_inf.core import TransferMembershipInferenceAttack
+from libs.PrivacyRaven.src.privacyraven.utils.query import get_target
+from libs.PrivacyRaven.src.privacyraven.models.victim import convert_to_inference
 
 
 def model_extraction(model,
