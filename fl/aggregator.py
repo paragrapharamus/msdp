@@ -26,7 +26,7 @@ class Aggregator:
 
     self.model_class = model_class
     self.model = None
-    self.trainer = Trainer(weights_summary=None, auto_select_gpus=True)
+    self.trainer = Trainer(weights_summary=None, gpus=1)
     self.clients = clients
     self.clients_per_round = clients_per_round
     self.current_round_clients = []
