@@ -11,10 +11,10 @@ from hypothesis.extra.numpy import arrays
 
 import privacyraven.extraction.synthesis
 import privacyraven.utils.query
-from privacyraven.models.victim import train_four_layer_mnist_victim
-from privacyraven.utils import model_creation, query
-from privacyraven.utils.data import get_emnist_data
-from privacyraven.utils.query import get_target
+from libs.PrivacyRaven.src.privacyraven.models.victim import train_four_layer_mnist_victim
+from libs.PrivacyRaven.src.privacyraven.utils import model_creation, query
+from libs.PrivacyRaven.src.privacyraven.utils.data import get_emnist_data
+from libs.PrivacyRaven.src.privacyraven.utils.query import get_target
 
 """
 The synthesis tests rely on sampling data from a model.

@@ -33,11 +33,11 @@ Here is how you would launch a model extraction attack in PrivacyRaven:
 ```python
 #examples/extract_mnist_gpu.py
 import privacyraven as pr
-from privacyraven.utils.data import get_emnist_data
-from privacyraven.extraction.core import ModelExtractionAttack
-from privacyraven.utils.query import get_target
-from privacyraven.models.victim import train_four_layer_mnist_victim
-from privacyraven.models.four_layer import FourLayerClassifier
+from libs.PrivacyRaven.src.privacyraven.utils.data import get_emnist_data
+from libs.PrivacyRaven.src.privacyraven.extraction.core import ModelExtractionAttack
+from libs.PrivacyRaven.src.privacyraven.utils.query import get_target
+from libs.PrivacyRaven.src.privacyraven.models.victim import train_four_layer_mnist_victim
+from libs.PrivacyRaven.src.privacyraven.models.four_layer import FourLayerClassifier
 
 # Create a query function for a target PyTorch Lightning model
 model = train_four_layer_mnist_victim()

@@ -6,11 +6,11 @@ and keyword attributes are used for model extraction.
 """
 import privacyraven as pr
 
-from privacyraven.utils.data import get_emnist_data
-from privacyraven.extraction.core import ModelExtractionAttack
-from privacyraven.utils.query import get_target
-from privacyraven.models.victim import train_four_layer_mnist_victim
-from privacyraven.models.four_layer import FourLayerClassifier
+from libs.PrivacyRaven.src.privacyraven.utils.data import get_emnist_data
+from libs.PrivacyRaven.src.privacyraven.extraction.core import ModelExtractionAttack
+from libs.PrivacyRaven.src.privacyraven.utils.query import get_target
+from libs.PrivacyRaven.src.privacyraven.models.victim import train_four_layer_mnist_victim
+from libs.PrivacyRaven.src.privacyraven.models.four_layer import FourLayerClassifier
 
 # trains a 4-layer fully connected neural network on MNIST data with the user's CPU.  See 
 # src/privacyraven/models/victims.py for a full set of supported parameters.

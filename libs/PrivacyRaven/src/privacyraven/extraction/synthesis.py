@@ -6,8 +6,8 @@ from pytorch_lightning.metrics.utils import to_onehot
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-from privacyraven.utils.model_creation import NewDataset  # , set_evasion_model
-from privacyraven.utils.query import reshape_input
+from libs.PrivacyRaven.src.privacyraven.utils.model_creation import NewDataset  # , set_evasion_model
+from libs.PrivacyRaven.src.privacyraven.utils.query import reshape_input
 
 # Creates an empty dictionary for synthesis functions
 synths = dict()

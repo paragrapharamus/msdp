@@ -8,10 +8,10 @@ from torch.utils.data import DataLoader, Dataset, random_split
 from torchvision import datasets, models, transforms
 from torchvision.datasets import MNIST
 
-from privacyraven.models.four_layer import FourLayerClassifier
-from privacyraven.models.pytorch import ThreeLayerClassifier
-from privacyraven.utils.data import get_mnist_loaders
-from privacyraven.utils.model_creation import (convert_to_inference,
+from libs.PrivacyRaven.src.privacyraven.models.four_layer import FourLayerClassifier
+from libs.PrivacyRaven.src.privacyraven.models.pytorch import ThreeLayerClassifier
+from libs.PrivacyRaven.src.privacyraven.utils.data import get_mnist_loaders
+from libs.PrivacyRaven.src.privacyraven.utils.model_creation import (convert_to_inference,
                                                set_hparams, train_and_test)
 
 

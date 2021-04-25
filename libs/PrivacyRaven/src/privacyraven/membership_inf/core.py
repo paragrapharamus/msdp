@@ -4,10 +4,10 @@ from sklearn.neural_network import MLPClassifier
 import torch
 from torch.cuda import device_count
 
-from privacyraven.extraction.core import ModelExtractionAttack
-from privacyraven.membership_inf.robustness import find_robustness
-from privacyraven.utils.query import establish_query
-from privacyraven.models.pytorch import ImagenetTransferLearning
+from libs.PrivacyRaven.src.privacyraven.extraction.core import ModelExtractionAttack
+from libs.PrivacyRaven.src.privacyraven.membership_inf.robustness import find_robustness
+from libs.PrivacyRaven.src.privacyraven.utils.query import establish_query
+from libs.PrivacyRaven.src.privacyraven.models.pytorch import ImagenetTransferLearning
 
 
 @attr.s

@@ -4,9 +4,9 @@ from art.estimators.classification import BlackBoxClassifier
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-from privacyraven.extraction.synthesis import hopskipjump
-from privacyraven.utils.model_creation import NewDataset
-from privacyraven.utils.query import reshape_input
+from libs.PrivacyRaven.src.privacyraven.extraction.synthesis import hopskipjump
+from libs.PrivacyRaven.src.privacyraven.utils.model_creation import NewDataset
+from libs.PrivacyRaven.src.privacyraven.utils.query import reshape_input
 
 robust = dict()
 

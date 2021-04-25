@@ -9,12 +9,12 @@ Users should refer to https://pytorch-lightning-bolts.readthedocs.io/en/latest/c
 Pytorch Lightning Bolt callbacks.
 """
 import privacyraven as pr
-from privacyraven.utils.data import get_emnist_data
+from libs.PrivacyRaven.src.privacyraven.utils.data import get_emnist_data
 from pl_bolts.callbacks import PrintTableMetricsCallback
-from privacyraven.extraction.core import ModelExtractionAttack
-from privacyraven.utils.query import get_target
-from privacyraven.models.victim import train_four_layer_mnist_victim
-from privacyraven.models.four_layer import FourLayerClassifier
+from libs.PrivacyRaven.src.privacyraven.extraction.core import ModelExtractionAttack
+from libs.PrivacyRaven.src.privacyraven.utils.query import get_target
+from libs.PrivacyRaven.src.privacyraven.models.victim import train_four_layer_mnist_victim
+from libs.PrivacyRaven.src.privacyraven.models.four_layer import FourLayerClassifier
 from pytorch_lightning.callbacks import Callback
 
 
