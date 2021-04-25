@@ -134,3 +134,4 @@ cifar10/
 ref/
 checkpoints*/
 model.pth
+out/*
