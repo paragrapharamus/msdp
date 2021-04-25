@@ -80,6 +80,8 @@ class FLEnvironment:
     # Start the FL simulation
     self.log("FL simulation started...")
     self.aggregator.train_and_test()
+    if args.save_model:
+      self.aggregator.save_model(args.save_model_path)
 
   def log(self, *msg):
     self.logger.log(*msg, module='FLEnv')
@@ -122,7 +124,7 @@ class FLEnvironment:
       client = Client(id=client_id,
                       model_class=model_class,
                       dataloaders=dataloaders,
-                      epochs=1,  # self.args.epochs,
+                      epochs=self.args.epochs,
                       batch_size=self.args.batch_size,
                       optimizer_class=optimizer_class,
                       learning_rate=self.args.lr,

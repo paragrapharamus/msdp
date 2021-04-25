@@ -1,7 +1,7 @@
 from typing import Optional, Type, List
 import numpy as np
 from copy import deepcopy
-from pytorch_lightning import LightningModule
+from pytorch_lightning import LightningModule, Trainer
 import torch
 from torch.utils.data import DataLoader
 
@@ -26,6 +26,7 @@ class Aggregator:
 
     self.model_class = model_class
     self.model = None
+    self.trainer = Trainer(weights_summary=None, auto_select_gpus=True)
     self.clients = clients
     self.clients_per_round = clients_per_round
     self.current_round_clients = []
@@ -72,18 +73,13 @@ class Aggregator:
                             self.curr_round_training_dataset_size)
 
   def test(self, loader):
-    losses = []
     self.model.to(self.device)
-    with torch.no_grad():
-      correct = 0
-      for data, targets in loader:
-        data, targets = data.to(self.device), targets.to(self.device)
-        output = self.model(data)
-        losses.append(self.model.compute_loss(output, targets).item())
-        correct += (torch.argmax(output, 1) == targets).float().sum()
-      accuracy = correct / len(loader.dataset)
-      self.log(f"Global model accuracy: {accuracy:.3f}")
+    results = self.trainer.test(self.model, loader)
+    self.log(f"Global model results: {results}")
     self.model.cpu()
+
+  def save_model(self, path):
+    self.trainer.save_checkpoint(path)
 
   def _send_model_and_train(self):
     for client in self.current_round_clients:

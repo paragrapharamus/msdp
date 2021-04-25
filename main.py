@@ -273,26 +273,26 @@ def main():
   if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
 
-  # use_cuda = not args.no_cuda and torch.cuda.is_available()
-  # device = torch.device("cuda" if use_cuda else "cpu")
-  #
-  # train_dataset, test_dataset = get_dataset('cifar10', False)
-  # args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
-  # FLEnvironment(model_class=Cifar10Net,
-  #               train_dataset=train_dataset,
-  #               test_dataset=test_dataset,
-  #               num_clients=2,
-  #               aggregator_class=Aggregator,
-  #               rounds=1,
-  #               device=device,
-  #               client_optimizer_class=torch.optim.SGD,
-  #               clients_per_round=0,
-  #               client_local_test_split=0.1,
-  #               partition_method='homogeneous',
-  #               alpha=10,
-  #               args=args)
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
 
-  model = train(args)
+  train_dataset, test_dataset = get_dataset('cifar10', False)
+  args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
+  FLEnvironment(model_class=Cifar10Net,
+                train_dataset=train_dataset,
+                test_dataset=test_dataset,
+                num_clients=2,
+                aggregator_class=Aggregator,
+                rounds=1,
+                device=device,
+                client_optimizer_class=torch.optim.SGD,
+                clients_per_round=0,
+                client_local_test_split=0.1,
+                partition_method='homogeneous',
+                alpha=10,
+                args=args)
+
+  # model = train(args)
   # model = Cifar10Net.load_from_checkpoint('./checkpoints/checkpoint-epoch=29-valid_acc=0.71.ckpt')
   # attack_model(model)
 
