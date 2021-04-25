@@ -10,11 +10,15 @@ from datasets.dataset_util import *
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
 from models import Cifar10Net
-from msdp import MSPDTrainer, Stages
+from msdp import MSPDTrainer
+from dp_stages import Stages
 
 
 def _parse_args():
   parser = argparse.ArgumentParser()
+  ##########################
+  # Basic training arguments
+  ##########################
   parser.add_argument(
     "--batch-size",
     type=int,
@@ -22,7 +26,6 @@ def _parse_args():
     metavar="N",
     help="input batch size for training (default: 64)",
   )
-
   parser.add_argument(
     "--minibatch_size",
     type=int,
@@ -30,7 +33,6 @@ def _parse_args():
     metavar="N",
     help="input minibatch size for training (default: 1)",
   )
-
   parser.add_argument(
     "--test-batch-size",
     type=int,
@@ -53,6 +55,13 @@ def _parse_args():
     help="learning rate (default: 0.02)",
   )
   parser.add_argument(
+    "--gamma",
+    type=float,
+    default=0.7,
+    metavar="M",
+    help="Learning rate step gamma (default: 0.7)",
+  )
+  parser.add_argument(
     "--wd",
     "--weight-decay",
     default=5e-4,
@@ -69,48 +78,6 @@ def _parse_args():
     help="momentum"
   )
   parser.add_argument(
-    "--max_grad_norm",
-    type=float,
-    default=2,
-    metavar="MAX_GRAD_NORM",
-    help="l2 gradient clipping norm (default: 1.0)",
-  )
-  parser.add_argument(
-    "--max_weight_norm",
-    type=float,
-    default=2,
-    metavar="MAX_WEIGHT_NORM",
-    help="l2 weights clipping norm (default: 1.0)",
-  )
-  parser.add_argument(
-    "--noise_multiplier",
-    type=float,
-    default=0.5,
-    metavar="NOISE_MULTIPLIER",
-    help="noise_multiplier (default: 1.0)",
-  )
-  parser.add_argument(
-    "--eps1",
-    type=float,
-    default=1,
-    metavar="EPS1",
-    help="Stage 1 Epsilon (Input perturbation)"
-  )
-  parser.add_argument(
-    "--eps3",
-    type=float,
-    default=1,
-    metavar="EPS3",
-    help="Stage 3 Epsilon (Output perturbation)"
-  )
-  parser.add_argument(
-    "--gamma",
-    type=float,
-    default=0.7,
-    metavar="M",
-    help="Learning rate step gamma (default: 0.7)",
-  )
-  parser.add_argument(
     "--no-cuda", action="store_true", default=False, help="disables CUDA training"
   )
   parser.add_argument(
@@ -122,13 +89,7 @@ def _parse_args():
   parser.add_argument(
     "--seed", type=int, default=42, metavar="S", help="random seed (default: 42)"
   )
-  parser.add_argument(
-    "--log-interval",
-    type=int,
-    default=100,
-    metavar="N",
-    help="how many batches to wait before logging training status",
-  )
+
   parser.add_argument(
     "--save-model-path",
     type=str,
@@ -147,7 +108,100 @@ def _parse_args():
     default='./checkpoints/checkpoint.pth',
     help="the path of the trained model"
   )
-
+  ##########################
+  # MSDP arguments
+  ##########################
+  # Stage 1
+  parser.add_argument(
+    "--eps1",
+    type=float,
+    default=1,
+    metavar="EPS1",
+    help="Stage 1 Epsilon (Input perturbation)"
+  )
+  # Stage 2
+  parser.add_argument(
+    "--noise_multiplier",
+    type=float,
+    default=0.5,
+    metavar="NOISE_MULTIPLIER",
+    help="noise_multiplier (default: 1.0)",
+  )
+  parser.add_argument(
+    "--max_grad_norm",
+    type=float,
+    default=2,
+    metavar="MAX_GRAD_NORM",
+    help="l2 gradient clipping norm (default: 1.0)",
+  )
+  # Stage 3
+  parser.add_argument(
+    "--eps3",
+    type=float,
+    default=1,
+    metavar="EPS3",
+    help="Stage 3 Epsilon (Output perturbation)"
+  )
+  parser.add_argument(
+    "--max_weight_norm",
+    type=float,
+    default=2,
+    metavar="MAX_WEIGHT_NORM",
+    help="l2 weights clipping norm (default: 1.0)",
+  )
+  # Stage 4
+  parser.add_argument(
+    "--eps4",
+    type=float,
+    default=1,
+    metavar="EPS3",
+    help="Stage 4 Epsilon (Aggregation perturbation)"
+  )
+  parser.add_argument(
+    "--max_weight_norm_aggregated",
+    type=float,
+    default=2,
+    help="L2 weights clipping norm for stage 4 (default: 2.0)",
+  )
+  ##########################
+  # FL arguments
+  ##########################
+  parser.add_argument(
+    "--num-rounds",
+    type=int,
+    default=25,
+    help="The number of federated learning rounds (default: 25)",
+  )
+  parser.add_argument(
+    "--num-clients",
+    type=int,
+    default=10,
+    help="The number of clients to take part in the FL (default: 10)",
+  )
+  parser.add_argument(
+    "--clients-per-round",
+    type=int,
+    default=10,
+    help="The number of clients to be selected each round (default: 10)",
+  )
+  parser.add_argument(
+    "--partition-method",
+    type=str,
+    default='heterogeneous',
+    help="The method for data partitioning. (default: 'heterogeneous')",
+  )
+  parser.add_argument(
+    "--alpha",
+    type=float,
+    default=1,
+    help="Controls the data heterogeneity if `partition-method='heterogeneous'` (default: 1.0)",
+  )
+  parser.add_argument(
+    "--client-local-test-split",
+    type=float,
+    default=0.1,
+    help="The fraction of the local training data to be used for testing (default: 0.1)",
+  )
   args = parser.parse_args()
   return args
 
@@ -163,14 +217,15 @@ def train(args):
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
-                        epochs=30,  # args.epochs,
+                        epochs=2,#args.epochs,
                         batch_size=args.batch_size,
                         device=device,
+                        save_checkpoint=True
                         )
 
   # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
-  trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
-  # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
+  # trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
+  trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   model = trainer.train_and_test()
   return model
@@ -218,26 +273,26 @@ def main():
   if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
 
-  use_cuda = not args.no_cuda and torch.cuda.is_available()
-  device = torch.device("cuda" if use_cuda else "cpu")
+  # use_cuda = not args.no_cuda and torch.cuda.is_available()
+  # device = torch.device("cuda" if use_cuda else "cpu")
+  #
+  # train_dataset, test_dataset = get_dataset('cifar10', False)
+  # args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
+  # FLEnvironment(model_class=Cifar10Net,
+  #               train_dataset=train_dataset,
+  #               test_dataset=test_dataset,
+  #               num_clients=2,
+  #               aggregator_class=Aggregator,
+  #               rounds=1,
+  #               device=device,
+  #               client_optimizer_class=torch.optim.SGD,
+  #               clients_per_round=0,
+  #               client_local_test_split=0.1,
+  #               partition_method='homogeneous',
+  #               alpha=10,
+  #               args=args)
 
-  train_dataset, test_dataset = get_dataset('cifar10', False)
-  args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
-  FLEnvironment(model_class=Cifar10Net,
-                train_dataset=train_dataset,
-                test_dataset=test_dataset,
-                num_clients=2,
-                aggregator_class=Aggregator,
-                rounds=1,
-                device=device,
-                client_optimizer_class=torch.optim.SGD,
-                clients_per_round=0,
-                client_local_test_split=0.1,
-                partition_method='homogeneous',
-                alpha=10,
-                args=args)
-
-  # model = train(args)
+  model = train(args)
   # model = Cifar10Net.load_from_checkpoint('./checkpoints/checkpoint-epoch=29-valid_acc=0.71.ckpt')
   # attack_model(model)
 

@@ -5,7 +5,8 @@ from pytorch_lightning import LightningModule
 from torch.utils.data import Dataset
 
 from log import Logger
-from msdp import MSPDTrainer, Stages
+from msdp import MSPDTrainer
+from dp_stages import Stages
 
 
 class Client:
@@ -60,17 +61,21 @@ class Client:
                                      experiment_id=experiment_id)
 
     # Attach the DP Stages if their parameters are provided
-    # if eps1:
-    #   self.model_trainer.attach_stage(Stages.STAGE_1, {'eps': eps1})
-    # if noise_multiplier or max_grad_norm:
-    #   self.model_trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': noise_multiplier,
-    #                                                    'max_grad_norm': max_grad_norm})
-    # if eps3:
-    #   self.model_trainer.attach_stage(Stages.STAGE_3, {'eps': eps3,
-    #                                                    'max_weight_norm': max_weight_norm})
+    if eps1:
+      self.model_trainer.attach_stage(Stages.STAGE_1, {'eps': eps1})
+    if noise_multiplier or max_grad_norm:
+      self.model_trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': noise_multiplier,
+                                                       'max_grad_norm': max_grad_norm})
+    if eps3:
+      self.model_trainer.attach_stage(Stages.STAGE_3, {'eps': eps3,
+                                                       'max_weight_norm': max_weight_norm})
+
+    # The number of times the clients took part in the aggregation
+    self.exposures = 0
 
   # noinspection PyArgumentList
   def update_model(self, parameters):
+    self.exposures += 1
     model_params = list(self.model_trainer.model.parameters())
     for i, param in enumerate(parameters):
       model_params[i].data.copy_(param.data)
@@ -87,6 +92,8 @@ class Client:
     return self.model_trainer.model.named_parameters()
 
   def train(self):
+    if Stages.STAGE_3 in self.model_trainer.stages:
+      self.model_trainer.stages[Stages.STAGE_3].set_exposures(self.exposures)
     self.model_trainer.train()
 
   def test(self):
