@@ -1,5 +1,5 @@
 import sys
-
+from datetime import datetime
 
 class Logger:
   STD_files = [sys.stdout, sys.stderr]
@@ -21,9 +21,13 @@ class Logger:
         file.close()
 
   def log(self, *message, module=''):
+    time = datetime.now()
+    time = str(time.strftime("%d/%m/%Y,%H:%M:%S"))
     for file in self.log_files:
-      print(f'[{module}]', *message, file=file)
+      print(f'[{time}] [{module}]', *message, file=file)
 
   def log_waring(self, *message, module=''):
+    time = datetime.now()
+    time = str(time.strftime("%d/%m/%Y,%H:%M:%S"))
     self.log(*message, module)
-    print(f'[{module}]', *message, file=sys.stderr)
+    print(f'[{time}] [{module}]', *message, file=sys.stderr)
