@@ -4,64 +4,9 @@ import torch.nn.functional as F
 import pytorch_lightning as pl
 
 
-class BaseNet(pl.LightningModule):
-  @property
-  def automatic_optimization(self) -> bool:
-    return False
-
-  def forward(self, x):
-    return self.classifier(x).view(-1, 10)
-
-  def training_step(self, batch, batch_idx):
-    opt = self.optimizers()
-    opt.zero_grad()
-    data, targets = batch
-    data, targets = data.to(self.device), targets.to(self.device)
-    output = self(data)
-    loss = self.compute_loss(output, targets)
-    self.manual_backward(loss, opt)
-    opt.step()
-    self.log('train_acc', self.train_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=False)
-    self.log('train_loss', loss, prog_bar=True, on_step=True, on_epoch=False)
-    return loss
-
-  def validation_step(self, batch, batch_idx):
-    data, targets = batch
-    data, targets = data.to(self.device), targets.to(self.device)
-    output = self(data)
-    loss = self.compute_loss(output, targets)
-    self.log('valid_acc', self.valid_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
-    self.log('valid_loss', loss, on_step=True, on_epoch=True)
-
-  def test_step(self, batch, batch_idx):
-    data, targets = batch
-    data, targets = data.to(self.device), targets.to(self.device)
-    output = self(data)
-    loss = self.compute_loss(output, targets)
-    self.log('test_acc', self.test_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
-    self.log('test_loss', loss, on_step=True, on_epoch=False)
-
-  def add_optimizer(self, optimizer):
-    self._optimizer = optimizer
-
-  def configure_optimizers(self):
-    if hasattr(self, "_optimizer"):
-      optimizer = self._optimizer
-    else:
-      optimizer = self.default_optimizer()
-    return optimizer
-
-  def default_optimizer(self):
-    return torch.optim.Adam(self.parameters(), lr=1e-3)
-
-  @staticmethod
-  def compute_loss(output, targets):
-    return F.cross_entropy(output, targets)
-
-
-class Cifar10Net(BaseNet):
+class Cifar10Net(pl.LightningModule):
   def __init__(self, *args):
-    super(BaseNet, self).__init__()
+    super(Cifar10Net, self).__init__()
 
     NUM_CLASSES = 10
     self.classifier = nn.Sequential(
@@ -81,6 +26,59 @@ class Cifar10Net(BaseNet):
     self.train_acc = pl.metrics.Accuracy()
     self.valid_acc = pl.metrics.Accuracy()
     self.test_acc = pl.metrics.Accuracy()
+
+  @property
+  def automatic_optimization(self) -> bool:
+    return False
+
+  def forward(self, x):
+    return self.classifier(x).view(-1, 10)
+
+  def training_step(self, batch, batch_idx):
+    opt = self.optimizers()
+    opt.zero_grad()
+    data, targets = batch
+    data, targets = data.to(self.device), targets.to(self.device)
+    output = self(data)
+    loss = self.compute_loss(output, targets)
+    self.manual_backward(loss, opt)
+    opt.step()
+    self.log('train_acc', self.train_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
+    self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
+    return loss
+
+  def validation_step(self, batch, batch_idx):
+    data, targets = batch
+    data, targets = data.to(self.device), targets.to(self.device)
+    output = self(data)
+    loss = self.compute_loss(output, targets)
+    self.log('valid_acc', self.valid_acc(torch.argmax(output, 1), targets), on_step=True, on_epoch=True)
+    self.log('valid_loss', loss, on_step=False, on_epoch=True)
+
+  def test_step(self, batch, batch_idx):
+    data, targets = batch
+    data, targets = data.to(self.device), targets.to(self.device)
+    output = self(data)
+    loss = self.compute_loss(output, targets)
+    self.log('test_acc', self.test_acc(torch.argmax(output, 1), targets), on_step=False, on_epoch=True)
+    self.log('test_loss', loss, on_step=False, on_epoch=True)
+
+  def add_optimizer(self, optimizer):
+    self._optimizer = optimizer
+
+  def configure_optimizers(self):
+    if hasattr(self, "_optimizer"):
+      optimizer = self._optimizer
+    else:
+      optimizer = self.default_optimizer()
+    return optimizer
+
+  def default_optimizer(self):
+    return torch.optim.Adam(self.parameters(), lr=1e-3)
+
+  @staticmethod
+  def compute_loss(output, targets):
+    return F.cross_entropy(output, targets)
 
 
 class AttackModel(nn.Module):
