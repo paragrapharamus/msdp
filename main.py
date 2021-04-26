@@ -62,7 +62,6 @@ def _parse_args():
     help="Learning rate step gamma (default: 0.7)",
   )
   parser.add_argument(
-    "--wd",
     "--weight-decay",
     default=5e-4,
     type=float,
@@ -217,7 +216,7 @@ def train(args):
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
                         data_loaders=dataloaders,
-                        epochs=2,#args.epochs,
+                        epochs=args.epochs,
                         batch_size=args.batch_size,
                         device=device,
                         save_checkpoint=True
@@ -225,7 +224,7 @@ def train(args):
 
   # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
   # trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
-  trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
+  # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   model = trainer.train_and_test()
   return model
@@ -262,11 +261,14 @@ def attack_model(model):
                        substitute_architecture=Cifar10Net,
                        attack_train_data=train_data,
                        attack_test_data=test_data,
-                       max_epochs=50)
+                       max_epochs=25)
+
+
+from config import ExperimentConfig
 
 
 def main():
-  args = _parse_args()
+  args = ExperimentConfig()
 
   # Deterministic, reproducible behaviour
   pl.seed_everything(args.seed)
@@ -278,22 +280,22 @@ def main():
 
   train_dataset, test_dataset = get_dataset('cifar10', False)
   args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
-  FLEnvironment(model_class=Cifar10Net,
-                train_dataset=train_dataset,
-                test_dataset=test_dataset,
-                num_clients=2,
-                aggregator_class=Aggregator,
-                rounds=1,
-                device=device,
-                client_optimizer_class=torch.optim.SGD,
-                clients_per_round=0,
-                client_local_test_split=0.1,
-                partition_method='homogeneous',
-                alpha=10,
-                args=args)
+  # FLEnvironment(model_class=Cifar10Net,
+  #               train_dataset=train_dataset,
+  #               test_dataset=test_dataset,
+  #               num_clients=2,
+  #               aggregator_class=Aggregator,
+  #               rounds=1,
+  #               device=device,
+  #               client_optimizer_class=torch.optim.SGD,
+  #               clients_per_round=0,
+  #               client_local_test_split=0.1,
+  #               partition_method='homogeneous',
+  #               alpha=10,
+  #               args=args)
 
-  # model = train(args)
-  # model = Cifar10Net.load_from_checkpoint('./checkpoints/checkpoint-epoch=29-valid_acc=0.71.ckpt')
+  model = train(args)
+  # model = Cifar10Net.load_from_checkpoint('./checkpoints_2/checkpoint-epoch=19-valid_acc=0.78.ckpt')
   # attack_model(model)
 
 
@@ -312,5 +314,8 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
     return f"{dir_name}_{dir_id}"
 
 
+import warnings
+
 if __name__ == '__main__':
+  warnings.filterwarnings("ignore")
   main()

@@ -77,6 +77,7 @@ class MSPDTrainer:
     self.logger = logger
     if logger is None:
       self.logger = Logger([sys.stdout, './msdp.log'])
+      self.model.personal_log = self.log
 
   def attach_stage(self, stage_type: Stages, stage_param_dict: dict):
     if stage_type == Stages.STAGE_1:
@@ -105,7 +106,8 @@ class MSPDTrainer:
                               gpus=self.gpus,
                               weights_summary=None,
                               logger=self.tensorboardlogger,
-                              callbacks=self.trainer_callbacks)
+                              callbacks=self.trainer_callbacks,
+                              progress_bar_refresh_rate=0)
 
     self.model.to(self.device)
 
