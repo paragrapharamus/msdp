@@ -1,5 +1,6 @@
 import argparse
 import os
+import warnings
 
 import pytorch_lightning as pl
 import torch
@@ -12,197 +13,7 @@ from fl.fl import FLEnvironment
 from models import Cifar10Net
 from msdp import MSPDTrainer
 from dp_stages import Stages
-
-
-def _parse_args():
-  parser = argparse.ArgumentParser()
-  ##########################
-  # Basic training arguments
-  ##########################
-  parser.add_argument(
-    "--batch-size",
-    type=int,
-    default=256,
-    metavar="N",
-    help="input batch size for training (default: 64)",
-  )
-  parser.add_argument(
-    "--minibatch_size",
-    type=int,
-    default=1,
-    metavar="N",
-    help="input minibatch size for training (default: 1)",
-  )
-  parser.add_argument(
-    "--test-batch-size",
-    type=int,
-    default=500,
-    metavar="N",
-    help="input batch size for testing (default: 100)",
-  )
-  parser.add_argument(
-    "--epochs",
-    type=int,
-    default=10,
-    metavar="N",
-    help="number of epochs to train (default: 20)",
-  )
-  parser.add_argument(
-    "--lr",
-    type=float,
-    default=0.02,
-    metavar="LR",
-    help="learning rate (default: 0.02)",
-  )
-  parser.add_argument(
-    "--gamma",
-    type=float,
-    default=0.7,
-    metavar="M",
-    help="Learning rate step gamma (default: 0.7)",
-  )
-  parser.add_argument(
-    "--weight-decay",
-    default=5e-4,
-    type=float,
-    metavar="W",
-    help="SGD weight decay (default: 5e-4)",
-    dest="weight_decay",
-  )
-  parser.add_argument(
-    "--momentum",
-    type=float,
-    default=0.9,
-    metavar="MOMENTUM",
-    help="momentum"
-  )
-  parser.add_argument(
-    "--no-cuda", action="store_true", default=False, help="disables CUDA training"
-  )
-  parser.add_argument(
-    "--dry-run",
-    action="store_true",
-    default=False,
-    help="quickly check a single pass",
-  )
-  parser.add_argument(
-    "--seed", type=int, default=42, metavar="S", help="random seed (default: 42)"
-  )
-
-  parser.add_argument(
-    "--save-model-path",
-    type=str,
-    default='./model.pth',
-    help="path for Saving the current Model",
-  )
-  parser.add_argument(
-    "--save-model",
-    action="store_true",
-    default=True,
-    help="For Saving the current Model",
-  )
-  parser.add_argument(
-    "--trained-model-path",
-    type=str,
-    default='./checkpoints/checkpoint.pth',
-    help="the path of the trained model"
-  )
-  ##########################
-  # MSDP arguments
-  ##########################
-  # Stage 1
-  parser.add_argument(
-    "--eps1",
-    type=float,
-    default=1,
-    metavar="EPS1",
-    help="Stage 1 Epsilon (Input perturbation)"
-  )
-  # Stage 2
-  parser.add_argument(
-    "--noise_multiplier",
-    type=float,
-    default=0.5,
-    metavar="NOISE_MULTIPLIER",
-    help="noise_multiplier (default: 1.0)",
-  )
-  parser.add_argument(
-    "--max_grad_norm",
-    type=float,
-    default=2,
-    metavar="MAX_GRAD_NORM",
-    help="l2 gradient clipping norm (default: 1.0)",
-  )
-  # Stage 3
-  parser.add_argument(
-    "--eps3",
-    type=float,
-    default=1,
-    metavar="EPS3",
-    help="Stage 3 Epsilon (Output perturbation)"
-  )
-  parser.add_argument(
-    "--max_weight_norm",
-    type=float,
-    default=2,
-    metavar="MAX_WEIGHT_NORM",
-    help="l2 weights clipping norm (default: 1.0)",
-  )
-  # Stage 4
-  parser.add_argument(
-    "--eps4",
-    type=float,
-    default=1,
-    metavar="EPS3",
-    help="Stage 4 Epsilon (Aggregation perturbation)"
-  )
-  parser.add_argument(
-    "--max_weight_norm_aggregated",
-    type=float,
-    default=2,
-    help="L2 weights clipping norm for stage 4 (default: 2.0)",
-  )
-  ##########################
-  # FL arguments
-  ##########################
-  parser.add_argument(
-    "--num-rounds",
-    type=int,
-    default=25,
-    help="The number of federated learning rounds (default: 25)",
-  )
-  parser.add_argument(
-    "--num-clients",
-    type=int,
-    default=10,
-    help="The number of clients to take part in the FL (default: 10)",
-  )
-  parser.add_argument(
-    "--clients-per-round",
-    type=int,
-    default=10,
-    help="The number of clients to be selected each round (default: 10)",
-  )
-  parser.add_argument(
-    "--partition-method",
-    type=str,
-    default='heterogeneous',
-    help="The method for data partitioning. (default: 'heterogeneous')",
-  )
-  parser.add_argument(
-    "--alpha",
-    type=float,
-    default=1,
-    help="Controls the data heterogeneity if `partition-method='heterogeneous'` (default: 1.0)",
-  )
-  parser.add_argument(
-    "--client-local-test-split",
-    type=float,
-    default=0.1,
-    help="The fraction of the local training data to be used for testing (default: 0.1)",
-  )
-  args = parser.parse_args()
-  return args
+from config import ExperimentConfig
 
 
 def train(args):
@@ -264,7 +75,14 @@ def attack_model(model):
                        max_epochs=25)
 
 
-from config import ExperimentConfig
+def train_opacus(args):
+  from dp.opacus_dp import opacus_training
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
+
+  dataloaders = load_dataset('cifar10', args)
+  model = Cifar10Net().to(device)
+  opacus_training(model, dataloaders, args)
 
 
 def main():
@@ -278,8 +96,8 @@ def main():
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
-  train_dataset, test_dataset = get_dataset('cifar10', False)
-  args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
+  # train_dataset, test_dataset = get_dataset('cifar10', False)
+  # args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
   # FLEnvironment(model_class=Cifar10Net,
   #               train_dataset=train_dataset,
   #               test_dataset=test_dataset,
@@ -294,9 +112,10 @@ def main():
   #               alpha=10,
   #               args=args)
 
-  model = train(args)
-  # model = Cifar10Net.load_from_checkpoint('./checkpoints_2/checkpoint-epoch=19-valid_acc=0.78.ckpt')
-  # attack_model(model)
+  # model = train(args)
+  model = Cifar10Net.load_from_checkpoint('./opacus_model.pth')
+  attack_model(model)
+  # train_opacus(args)
 
 
 def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
@@ -313,8 +132,6 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
   else:
     return f"{dir_name}_{dir_id}"
 
-
-import warnings
 
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
