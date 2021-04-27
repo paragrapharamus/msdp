@@ -15,6 +15,18 @@ from log import Logger
 class MSPDTrainer:
   """
   Multistage differentially private trainer
+
+    :param model:
+    :param data_loaders:
+    :param epochs:
+    :param batch_size:
+    :param device:
+    :param optimizer:
+    :param logger:
+    :param save_checkpoint:
+    :param gpus:
+    :param id:
+    :param experiment_id:
   """
   STATS_FMT = "[{:>5s}] loss: {:+.4f}, acc: {:.4f}"
 
@@ -81,7 +93,8 @@ class MSPDTrainer:
 
   def attach_stage(self, stage_type: Stages, stage_param_dict: dict):
     if stage_type == Stages.STAGE_1:
-      self.stages[stage_type] = Stage1(stage_param_dict['eps'])
+      self.stages[stage_type] = Stage1(stage_param_dict['eps'],
+                                       stage_param_dict.get('max_grad_norm', None))
     elif stage_type == Stages.STAGE_2:
       self.stages[stage_type] = Stage2(stage_param_dict['noise_multiplier'],
                                        stage_param_dict['max_grad_norm'])

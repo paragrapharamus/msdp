@@ -10,7 +10,7 @@ class ExperimentConfig:
     ##########################
     self.batch_size = 128
     self.test_batch_size = 500
-    self.epochs = 10
+    self.epochs = 15
     self.lr = 0.02
     self.gamma = 0.7
     self.weight_decay = 5e-4
@@ -26,15 +26,15 @@ class ExperimentConfig:
     # MSDP
     ##########################
     # Stage 1
-    self.eps1 = 1
+    self.eps1 = 0.1
 
     # Stage 2
-    self.noise_multiplier = 0.5
-    self.max_grad_norm = 2
+    self.noise_multiplier = 0.3
+    self.max_grad_norm = 3
 
     # Stage 3
     self.eps3 = 1
-    self.max_weight_norm = 2
+    self.max_weight_norm = 20
 
     # Stage 4
     self.eps4 = 1
@@ -48,5 +48,5 @@ class ExperimentConfig:
     self.clients_per_round = 10
     self.client_optimizer_class = torch.optim.SGD
     self.partition_method = 'heterogeneous'
-    self.alpha = 1
+    self.alpha = 20
     self.client_local_test_split = 0.1

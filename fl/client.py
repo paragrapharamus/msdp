@@ -10,6 +10,27 @@ from dp_stages import Stages
 
 
 class Client:
+  """
+  FL client
+
+  :param id:
+  :param model_class:
+  :param dataloaders:
+  :param epochs:
+  :param batch_size:
+  :param optimizer_class:
+  :param learning_rate:
+  :param weight_decay:
+  :param device:
+  :param optimizer_momentum:
+  :param eps1:
+  :param noise_multiplier:
+  :param max_grad_norm:
+  :param eps3:
+  :param max_weight_norm:
+  :param logger:
+  :param experiment_id:
+  """
   def __init__(self,
                id: int,
                model_class: Type[LightningModule],
@@ -28,6 +49,7 @@ class Client:
                max_weight_norm: Optional[float] = None,
                logger: Optional[Logger] = None,
                experiment_id: Optional[int] = 0):
+
     self.id = id
     self.model_class = model_class
     self.device = device
@@ -62,7 +84,8 @@ class Client:
 
     # Attach the DP Stages if their parameters are provided
     if eps1:
-      self.model_trainer.attach_stage(Stages.STAGE_1, {'eps': eps1})
+      self.model_trainer.attach_stage(Stages.STAGE_1, {'eps': eps1,
+                                                       'max_grad_norm': max_grad_norm})
     if noise_multiplier or max_grad_norm:
       self.model_trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': noise_multiplier,
                                                        'max_grad_norm': max_grad_norm})

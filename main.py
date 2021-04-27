@@ -1,6 +1,7 @@
 import argparse
 import os
 import warnings
+from copy import deepcopy
 
 import pytorch_lightning as pl
 import torch
@@ -33,27 +34,47 @@ def train(args):
                         save_checkpoint=True
                         )
 
-  # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1})
-  # trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
-  # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
+  trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1, 'max_grad_norm': args.max_grad_norm})
+  trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
+  trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   model = trainer.train_and_test()
   return model
 
 
-def attack_model(model):
+def attack_model(model, num_data=10000):
+  def truncate(ds, size):
+    idxs = np.random.permutation(len(ds))[:size]
+    ds.data = ds.data[idxs]
+    ds.targets = np.array(ds.targets)[idxs]
+    return ds
+
+  def merge(ds1, ds2):
+    ds = deepcopy(ds1)
+    ds.data = np.concatenate([ds1.data, ds2.data])
+    ds.targets = np.concatenate([ds1.targets, ds2.targets])
+    idxs = np.random.permutation(len(ds.data))
+    ds.data = ds.data[idxs]
+    ds.targets = ds.targets[idxs]
+    return ds
+
   # Obtain seed (or public) data to be used in extraction
-  test_dataset = get_cifar10_dataset()[2]
+  train_dataset, _, test_dataset = get_cifar10_dataset()
+  train_dataset = truncate(train_dataset, num_data // 2)
+  test_dataset = truncate(test_dataset, num_data // 2)
+  dataset = merge(train_dataset, test_dataset)
+
   split_ratio = 0.1
-  train_data, test_data = random_split(test_dataset,
-                                       [int((1 - split_ratio) * len(test_dataset)),
-                                        int(split_ratio * len(test_dataset))])
+  train_data, test_data = random_split(dataset,
+                                       [int((1 - split_ratio) * len(dataset)),
+                                        int(split_ratio * len(dataset))])
   train_data = [train_data.dataset[i] for i in train_data.indices]
   test_data = [test_data.dataset[i] for i in test_data.indices]
+
   data_shape = (1, 3, 32, 32)
 
   # model_extraction(model=model,
-  #                  query_limit=10000,
+  #                  query_limit=num_data,
   #                  victim_input_shape=data_shape,
   #                  number_of_targets=10,
   #                  attacker_input_shape=data_shape,
@@ -64,7 +85,7 @@ def attack_model(model):
   #                  max_epochs=30)
 
   membership_inference(model=model,
-                       query_limit=10000,
+                       query_limit=num_data,
                        victim_input_shape=data_shape,
                        number_of_targets=10,
                        attacker_input_shape=data_shape,
@@ -113,7 +134,7 @@ def main():
   #               args=args)
 
   # model = train(args)
-  model = Cifar10Net.load_from_checkpoint('./opacus_model.pth')
+  model = Cifar10Net.load_from_checkpoint('checkpoints_opacus_private/opacus_model.pth')
   attack_model(model)
   # train_opacus(args)
 
@@ -131,6 +152,7 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
     return checkpoint_dir
   else:
     return f"{dir_name}_{dir_id}"
+
 
 
 if __name__ == '__main__':

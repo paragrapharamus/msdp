@@ -11,6 +11,21 @@ from log import Logger
 
 
 class Aggregator:
+  """
+  FL aggregator
+
+  :param model_class:
+  :param clients:
+  :param clients_per_round:
+  :param total_training_data_size:
+  :param val_dataloader:
+  :param test_dataloader:
+  :param rounds:
+  :param device:
+  :param logger:
+  :param epsilon:
+  :param max_weight_norm:
+  """
   def __init__(self,
                model_class: Type[LightningModule],
                clients: List[Client],

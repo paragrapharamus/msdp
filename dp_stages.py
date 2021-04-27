@@ -23,6 +23,11 @@ class Stages(Enum):
       * eps: float
           Quantifies the degree of privacy added during this stage, 
           hence the amount of noise which will be injected into data.
+      * max_grad_norm: Optional[Union[float, List[float]]]
+          The maximum L2 norm to which the gradients will be clipped.
+          Could be a single real value, to which all gradients will be
+          clipped or a list of maximum norms per layer. 
+          If provided, the input perturbation mechanism will be adapted 
   """
 
   STAGE_2 = 2
@@ -91,17 +96,33 @@ class Stage1(DPStage):
   """
     Input perturbation.
     This stage adds calibrated noise directly to the training data.
+
+    :param eps: float
+          Quantifies the degree of privacy added during this stage,
+          hence the amount of noise which will be injected into data.
+
+    :param max_grad_norm: Optional[Union[float, List[float]]]
+          The maximum L2 norm to which the gradients will be clipped.
+          Could be a single real value, to which all gradients will be
+          clipped or a list of maximum norms per layer.
+          If provided, the input perturbation mechanism will be adapted
   """
 
-  def __init__(self, eps: float):
+  def __init__(self,
+               eps: float,
+               max_grad_norm: Optional[Union[float, List[float]]] = None):
+
     super(Stage1, self).__init__('STAGE_1')
     self.eps = eps
+    self.max_grad_norm = max_grad_norm
+    if max_grad_norm and isinstance(max_grad_norm, list):
+      self.max_grad_norm = np.array(max_grad_norm).mean()
 
   def apply(self, data_loader: DataLoader) -> DataLoader:
     dataset = torch.tensor(np.moveaxis(data_loader.dataset.data, -1, 1)).float()
-    sensitivity = self._get_sensitivity(dataset)
-    self.log(f"Input perturbation: sensitivity: {sensitivity}")
-    noised_data = self._perturb_dataset(dataset, sensitivity)
+
+    noised_data = self._perturb_dataset(dataset) if self.max_grad_norm \
+      else self._perturb_dataset_with_sensitivity(dataset)
 
     dataset = np.moveaxis(noised_data.numpy(), 1, -1)
     dataset = (dataset - dataset.min()) / (dataset.max() - dataset.min()) * 255
@@ -109,8 +130,29 @@ class Stage1(DPStage):
     data_loader.stage_1_attached = True
     return data_loader
 
-  def _perturb_dataset(self, dataset: torch.Tensor, sensitivity: torch.Tensor) -> torch.Tensor:
+  def _perturb_dataset(self, dataset: torch.Tensor) -> torch.Tensor:
+    """
+      Based on -> https://arxiv.org/abs/1710.07425
+    """
+    n = len(dataset)
+    delta = 1 / (2 * len(dataset))
+    a = np.sqrt(np.log(2 / delta) / n)
+    d = dataset[0].dim()
+    std = np.sqrt(2 * d * a) * self.max_grad_norm
+    std += np.sqrt(2 * d * a ** 2 * self.max_grad_norm ** 2 + 2 * self.max_grad_norm * (1 - 2 * a) / self.eps)
+    std /= (1 - 2 * a)
+    ldp_e = np.sqrt(n) * self.eps
+    self.log(f"Input perturbation: ({ldp_e:.2f}, {delta:.2e})-LDP with std={std:.2e}, ({self.eps}, {delta})-DP")
+    noise = torch.normal(0, std, size=dataset.shape)
+    dataset += noise
+    return dataset
+
+  def _perturb_dataset_with_sensitivity(self, dataset: torch.Tensor) -> torch.Tensor:
+    """
+    Based on -> https://www.cis.upenn.edu/~aaroth/Papers/privacybook.pdf
+    """
     delta = 1 / (1.5 * len(dataset))
+    sensitivity = self._get_sensitivity(dataset)
     eps = 25 * self.eps
     std = sensitivity * np.sqrt(2 * np.log(1.25 / delta)) / eps
     self.log(f"Input perturbation: ({eps:.2f}, {delta:.2e})-DP with std={std:.2e}")
@@ -129,6 +171,7 @@ class Stage1(DPStage):
     else:
       raise ValueError("Unknown data shape to compute the sensitivity")
     sensitivity = torch.sqrt(torch.abs(norms.max(dim=0)[0] - norms.min(dim=0)[0]))
+    self.log(f"Input perturbation: sensitivity: {sensitivity}")
     return sensitivity
 
 
@@ -136,6 +179,14 @@ class Stage2(DPStage):
   """
     Gradient Perturbation.
     This stage wraps the optimizer and injects noise into the gradients
+
+    :param noise_multiplier:  float
+          The ratio of the standard deviation of the Gaussian noise to
+          the L2-sensitivity of the function to which the noise is added
+    :param max_grad_norm:  Union[float, List[float]]
+          The maximum L2 norm to which the gradients will be clipped.
+          Could be a single real value, to which all gradients will be
+          clipped or a list of maximum norms per layer
   """
 
   def __init__(self,
@@ -150,9 +201,12 @@ class Stage2(DPStage):
             model: nn.Module,
             optimizer: torch.optim.Optimizer,
             device: torch.device) -> torch.optim.Optimizer:
+    """
+      See -> https://github.com/pytorch/opacus
+    """
     self.model = model
     self.device = device
-    # Opacus
+
     norm_clipper = (
       clipping.ConstantFlatClipper(self.max_grad_norm)
       if not isinstance(self.max_grad_norm, list)
@@ -213,6 +267,14 @@ class Stage3(DPStage):
   """
     Output (weights) Perturbation.
     Injects calibrated noise into the weights of the trained model
+
+    :param eps:  float`
+          Quantifies the degree of privacy added during this stage,
+          hence the amount of noise which will be injected into the weights.
+    :param max_weight_norm: Union[float, List[float]]
+          The maximum L2 norm to which the weights will be clipped.
+          Could be a single real value, to which all weights will be
+          clipped or a list of maximum norms per layer
   """
 
   def __init__(self,
@@ -227,7 +289,9 @@ class Stage3(DPStage):
             model: nn.Module,
             training_dataset_size: float,
             ) -> nn.Module:
-
+    """
+    Based on -> https://arxiv.org/abs/1911.00222 for the uplink channel
+    """
     # Compute probability of DP failure
     delta = 1 / (1.5 * training_dataset_size)
     # The standard deviation of the Gaussian noise. This is not calibrated yet.
@@ -258,6 +322,14 @@ class Stage3(DPStage):
 class Stage4(DPStage):
   """
     Aggregated model output perturbation
+
+    :param eps:  float`
+          Quantifies the degree of privacy added during this stage,
+          hence the amount of noise which will be injected into the weights.
+    :param max_weight_norm: Union[float, List[float]]
+          The maximum L2 norm to which the weights will be clipped.
+          Could be a single real value, to which all weights will be
+          clipped or a list of maximum norms per layer
   """
 
   def __init__(self,

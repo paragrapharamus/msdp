@@ -19,7 +19,21 @@ from log import Logger
 class FLEnvironment:
   """ Federeated Learning simulated Environment
 
-    """
+    :param model_class:
+    :param train_dataset:
+    :param test_dataset:
+    :param num_clients:
+    :param aggregator_class:
+    :param rounds:
+    :param device:
+    :param client_optimizer_class:
+    :param partition_method:
+    :param alpha:
+    :param clients_per_round:
+    :param client_local_test_split:
+    :param logger:
+    :param args:
+  """
 
   def __init__(self,
                model_class: Type[pl.LightningModule],
