@@ -36,6 +36,7 @@ class MSPDTrainer:
                epochs: int,
                batch_size: int,
                device: torch.device,
+               virtual_batches: Optional[int] = 1,
                optimizer: Optional[torch.optim.Optimizer] = None,
                logger: Optional[Logger] = None,
                save_checkpoint: Optional[bool] = False,
@@ -80,6 +81,7 @@ class MSPDTrainer:
 
     self.epochs = epochs
     self.batch_size = batch_size
+    self.virtual_batches = virtual_batches
     self.device = device
     self.gpus = gpus
     self.steps = 0
@@ -120,7 +122,8 @@ class MSPDTrainer:
                               weights_summary=None,
                               logger=self.tensorboardlogger,
                               callbacks=self.trainer_callbacks,
-                              progress_bar_refresh_rate=0)
+                              progress_bar_refresh_rate=0,
+                              accumulate_grad_batches=self.virtual_batches)
 
     self.model.to(self.device)
 
@@ -138,14 +141,19 @@ class MSPDTrainer:
 
     # Wrap the optimizer to perform DP training
     if Stages.STAGE_2 in self.stages:
-      # Attach stage 2 only once (add the model hooks), but update the optimizer
-      # each time the model has been externally updated
-      if hasattr(self.optimizer, 'stage_2_attached'):
-        self.model.add_optimizer(self.stages[Stages.STAGE_2].wrap_optimizer(self.optimizer))
-      else:
-        self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model, self.optimizer, self.device))
+        self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model,
+                                                                   self.optimizer,
+                                                                   self.device,
+                                                                   self.batch_size,
+                                                                   len(self.train_loader.dataset),
+                                                                   self.virtual_batches))
 
     self.trainer.fit(self.model, *loaders)
+
+    if Stages.STAGE_2 in self.stages:
+      eps, delta = self.stages[Stages.STAGE_2].get_privacy_spent(len(self.train_loader.dataset))
+      self.log(f'Privacy from Stage 2: (ε={eps:.2f}, δ={delta:.2e})')
+      self.stages[Stages.STAGE_2].detach()
 
     # Inject noise to model's weights
     if Stages.STAGE_3 in self.stages:

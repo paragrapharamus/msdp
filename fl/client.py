@@ -41,6 +41,7 @@ class Client:
                learning_rate: float,
                weight_decay: float,
                device: torch.device,
+               virtual_batches: Optional[int] = 1,
                optimizer_momentum: Optional[float] = 0.9,
                eps1: Optional[float] = None,
                noise_multiplier: Optional[float] = None,
@@ -78,6 +79,7 @@ class Client:
                                      epochs=epochs,
                                      batch_size=batch_size,
                                      device=device,
+                                     virtual_batches=virtual_batches,
                                      id=id,
                                      logger=logger,
                                      experiment_id=experiment_id)

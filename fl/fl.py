@@ -2,17 +2,14 @@ import sys
 from copy import deepcopy
 from typing import Optional, Tuple, Type, List, Dict, Union
 
-from torch.utils.data import DataLoader, Dataset
-import torch
+from datasets.dataset_util import truncate_dataset, train_test_split
 import numpy as np
+import pytorch_lightning as pl
+import torch
+from torch.utils.data import DataLoader, Dataset
 
-from datasets.dataset_util import get_dataset, get_dataset_transform, build_truncated_dataset
 from fl.aggregator import Aggregator
 from fl.client import Client
-import pytorch_lightning as pl
-
-from pytorch_lightning import LightningModule
-
 from log import Logger
 
 
@@ -126,7 +123,7 @@ class FLEnvironment:
 
       # Generate local test splits
       if client_local_test_split:
-        train_dataset, test_dataset = self._train_test_split(client_dataset, client_local_test_split)
+        train_dataset, test_dataset = train_test_split(client_dataset, client_local_test_split)
         train_loader = DataLoader(train_dataset, **train_kwargs)
         test_loader = DataLoader(test_dataset, **test_kwargs)
         dataloaders = [train_loader, test_loader]
@@ -144,6 +141,7 @@ class FLEnvironment:
                       learning_rate=self.args.lr,
                       weight_decay=self.args.weight_decay,
                       device=self.device,
+                      virtual_batches=self.args.virtual_batches,
                       optimizer_momentum=self.args.momentum,
                       eps1=self.args.eps1,
                       noise_multiplier=self.args.noise_multiplier,
@@ -154,39 +152,6 @@ class FLEnvironment:
                       experiment_id=self.args.experiment_id)
       clients.append(client)
     return clients, n_training_data
-
-  @staticmethod
-  def _train_test_split(dataset, test_split_ratio, shuffle=False):
-
-    def truncate_dataset(ds, idxs):
-      ds.data = ds.data[idxs]
-      ds.targets = ds.targets[idxs]
-      return ds
-
-    dataset_size = len(dataset)
-    if isinstance(test_split_ratio, bool):
-      test_split_ratio = 0.1
-    else:
-      # make sure the smaller fraction is for the test split
-      test_split_ratio = test_split_ratio \
-        if test_split_ratio < 0.5 \
-        else 1 - test_split_ratio
-
-    if shuffle:
-      indices = np.random.permutation(dataset_size)
-      dataset.data = dataset.data[indices]
-      if not isinstance(dataset.targets, np.ndarray):
-        dataset.targets = np.array(dataset.targets)
-      dataset.targets = dataset.targets[indices]
-
-    split_index = int(dataset_size * test_split_ratio)
-    # Get the test data split
-    test_indices = np.array(range(split_index))
-    test_dataset = truncate_dataset(deepcopy(dataset), test_indices)
-    # Get the train data split
-    train_indices = np.array(range(split_index, dataset_size))
-    train_dataset = truncate_dataset(dataset, train_indices)
-    return train_dataset, test_dataset
 
   def _split_dataset(self, train_dataset: Dataset, partition_method: str) -> Tuple[Dict[int, Dataset], Dataset]:
     """
@@ -230,7 +195,7 @@ class FLEnvironment:
     :return: The allocation dictionary dict[split_id, np.ndarray[indices]]
     """
     # Get the dataset
-    train_dataset, val_dataset = self._train_test_split(train_dataset, 0.1, True)
+    train_dataset, val_dataset = train_test_split(train_dataset, 0.1, True)
 
     train_dataset.targets = train_dataset.targets
     training_dataset_size = len(train_dataset.data)

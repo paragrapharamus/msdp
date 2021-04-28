@@ -1,6 +1,9 @@
+from copy import deepcopy
+from typing import Optional, Union
+
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, sampler
+from torch.utils.data import DataLoader, sampler, Dataset
 from torchvision import datasets
 from torchvision import transforms
 
@@ -60,20 +63,65 @@ def get_cifar10_dataset(validation_dataset=True):
     return train_dataset, test_dataset
 
 
+def truncate_dataset(ds: Dataset, idxs: np.ndarray):
+  """
+    Returns the truncated dataset that contains data
+    corresponding to the given indices
+  """
+  ds.data = ds.data[idxs]
+  if not isinstance(ds.targets, np.ndarray):
+    ds.targets = np.array(ds.targets)
+  ds.targets = ds.targets[idxs]
+  return ds
+
+
+def merge_datasets(ds1: Dataset, ds2: Dataset):
+  """
+    Merges the two datasets without altering them
+  """
+  ds = deepcopy(ds1)
+  ds.data = np.concatenate([ds1.data, ds2.data])
+  ds.targets = np.concatenate([ds1.targets, ds2.targets])
+  idxs = np.random.permutation(len(ds.data))
+  ds.data = ds.data[idxs]
+  ds.targets = ds.targets[idxs]
+  return ds
+
+
+def train_test_split(dataset: Dataset,
+                     test_split_ratio: Optional[Union[float, bool]] = 0.1,
+                     shuffle=False):
+  dataset_size = len(dataset)
+  if isinstance(test_split_ratio, bool):
+    test_split_ratio = 0.1
+  else:
+    # make sure the smaller fraction is for the test split
+    test_split_ratio = test_split_ratio \
+      if test_split_ratio < 0.5 \
+      else 1 - test_split_ratio
+
+  if shuffle:
+    indices = np.random.permutation(dataset_size)
+    dataset.data = dataset.data[indices]
+    if not isinstance(dataset.targets, np.ndarray):
+      dataset.targets = np.array(dataset.targets)
+    dataset.targets = dataset.targets[indices]
+
+  split_index = int(dataset_size * test_split_ratio)
+  # Get the test data split
+  test_indices = np.array(range(split_index))
+  test_dataset = truncate_dataset(deepcopy(dataset), test_indices)
+  # Get the train data split
+  train_indices = np.array(range(split_index, dataset_size))
+  train_dataset = truncate_dataset(dataset, train_indices)
+  return train_dataset, test_dataset
+
+
 def load_cifar10(test_kwargs, train_kwargs):
-  train_dataset, valid_dataset, test_dataset = get_cifar10_dataset()
-  training_dataset_size = len(train_dataset)
-  indices = list(range(training_dataset_size))
-  split = int(np.floor(0.1 * training_dataset_size))
-  np.random.shuffle(indices)
-  # Split the training dataset
-  train_idx, valid_idx = indices[split:], indices[:split]
-  train_sampler = sampler.SubsetRandomSampler(train_idx)
-  valid_sampler = sampler.SubsetRandomSampler(valid_idx)
+  train_dataset, test_dataset = get_cifar10_dataset(validation_dataset=False)
+  train_dataset, valid_dataset = train_test_split(train_dataset, shuffle=True)
   # Define the data loaders
-  train_kwargs["sampler"] = train_sampler
   valid_kwargs = test_kwargs.copy()
-  valid_kwargs["sampler"] = valid_sampler
   train_loader = DataLoader(train_dataset, **train_kwargs)
   valid_loader = DataLoader(valid_dataset, **valid_kwargs)
   test_loader = DataLoader(test_dataset, **test_kwargs)

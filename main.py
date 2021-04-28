@@ -34,9 +34,9 @@ def train(args):
                         save_checkpoint=True
                         )
 
-  trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1, 'max_grad_norm': args.max_grad_norm})
+  # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1, 'max_grad_norm': args.max_grad_norm})
   trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
-  trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
+  # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   model = trainer.train_and_test()
   return model
@@ -49,20 +49,11 @@ def attack_model(model, num_data=10000):
     ds.targets = np.array(ds.targets)[idxs]
     return ds
 
-  def merge(ds1, ds2):
-    ds = deepcopy(ds1)
-    ds.data = np.concatenate([ds1.data, ds2.data])
-    ds.targets = np.concatenate([ds1.targets, ds2.targets])
-    idxs = np.random.permutation(len(ds.data))
-    ds.data = ds.data[idxs]
-    ds.targets = ds.targets[idxs]
-    return ds
-
   # Obtain seed (or public) data to be used in extraction
-  train_dataset, _, test_dataset = get_cifar10_dataset()
+  train_dataset, test_dataset = get_cifar10_dataset(validation_dataset=False)
   train_dataset = truncate(train_dataset, num_data // 2)
   test_dataset = truncate(test_dataset, num_data // 2)
-  dataset = merge(train_dataset, test_dataset)
+  dataset = merge_datasets(train_dataset, test_dataset)
 
   split_ratio = 0.1
   train_data, test_data = random_split(dataset,
@@ -133,9 +124,9 @@ def main():
   #               alpha=10,
   #               args=args)
 
-  # model = train(args)
-  model = Cifar10Net.load_from_checkpoint('checkpoints_opacus_private/opacus_model.pth')
-  attack_model(model)
+  model = train(args)
+  # model = Cifar10Net.load_from_checkpoint('checkpoints_opacus_private/opacus_model.pth')
+  # attack_model(model)
   # train_opacus(args)
 
 
@@ -152,7 +143,6 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
     return checkpoint_dir
   else:
     return f"{dir_name}_{dir_id}"
-
 
 
 if __name__ == '__main__':

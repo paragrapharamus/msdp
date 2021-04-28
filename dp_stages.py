@@ -4,7 +4,7 @@ from typing import Union, List, Optional
 
 import numpy as np
 import torch
-from opacus import PerSampleGradientClipper
+from opacus import PerSampleGradientClipper, PrivacyEngine
 from opacus.utils import clipping
 from torch import nn
 from torch.utils.data import DataLoader
@@ -191,77 +191,43 @@ class Stage2(DPStage):
 
   def __init__(self,
                noise_multiplier: float,
-               max_grad_norm: Union[float, List[float]]):
+               max_grad_norm: Union[float, List[float]],
+               ):
     super(Stage2, self).__init__('STAGE_2')
     self.noise_multiplier = noise_multiplier
     self.max_grad_norm = max_grad_norm
-    self.steps = 0
+    self.privacy_engine = None
 
   def apply(self,
             model: nn.Module,
             optimizer: torch.optim.Optimizer,
-            device: torch.device) -> torch.optim.Optimizer:
+            device: torch.device,
+            batch_size: int,
+            train_data_size: int,
+            n_accumulated_steps: Optional[int] = 1
+            ) -> torch.optim.Optimizer:
     """
       See -> https://github.com/pytorch/opacus
     """
-    self.model = model
-    self.device = device
-
-    norm_clipper = (
-      clipping.ConstantFlatClipper(self.max_grad_norm)
-      if not isinstance(self.max_grad_norm, list)
-      else clipping.ConstantPerLayerClipper(self.max_grad_norm)
+    clipping = {"clip_per_layer": False, "enable_stat": True}
+    self.privacy_engine = PrivacyEngine(
+      model,
+      sample_rate=(n_accumulated_steps * batch_size) / train_data_size,
+      noise_multiplier=self.noise_multiplier,
+      max_grad_norm=self.max_grad_norm,
+      secure_rng=False,
+      **clipping,
     )
+    self.privacy_engine.attach(optimizer)
 
-    self.clipper = PerSampleGradientClipper(self.model, norm_clipper)
-
-    optimizer = self.wrap_optimizer(optimizer)
-    optimizer.stage_2_attached = True
     return optimizer
 
-  def wrap_optimizer(self, optimizer):
-    def dp_zero_grad(self):
-      self.dpstage._zero_grad()
-      self.original_zero_grad()
+  def detach(self):
+    self.privacy_engine.detach()
 
-    def dp_step(self, closure=None):
-      self.dpstage._step()
-      self.original_step(closure)
-
-    optimizer.dpstage = self
-    optimizer.original_step = optimizer.step
-    optimizer.step = types.MethodType(dp_step, optimizer)
-
-    optimizer.original_zero_grad = optimizer.zero_grad
-    optimizer.zero_grad = types.MethodType(dp_zero_grad, optimizer)
-    return optimizer
-
-  def _zero_grad(self):
-    self.clipper.zero_grad()
-
-  def _step(self):
-    self.steps += 1
-    self.clipper.clip_and_accumulate()
-    clip_values, batch_size = self.clipper.pre_step()
-
-    params = (p for p in self.model.parameters() if p.requires_grad)
-    for p, clip_value in zip(params, clip_values):
-      noise = self._generate_noise(clip_value, p)
-      noise /= batch_size
-      p.grad += noise
-
-  def _generate_noise(self,
-                      max_grad_norm: float,
-                      reference: nn.parameter.Parameter) -> torch.Tensor:
-    if self.noise_multiplier > 0 and max_grad_norm > 0:
-      return torch.normal(
-        0,
-        self.noise_multiplier * max_grad_norm,
-        reference.grad.shape,
-        device=self.device,
-      )
-    return torch.zeros(reference.grad.shape, device=self.device)
-
+  def get_privacy_spent(self, train_dataset_size: int):
+    delta = 1 / (1.5 * train_dataset_size)
+    return self.privacy_engine.get_privacy_spent(delta)[0], delta
 
 class Stage3(DPStage):
   """

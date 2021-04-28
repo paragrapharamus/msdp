@@ -26,6 +26,7 @@ class Aggregator:
   :param epsilon:
   :param max_weight_norm:
   """
+
   def __init__(self,
                model_class: Type[LightningModule],
                clients: List[Client],
@@ -104,7 +105,7 @@ class Aggregator:
       client.test()
 
   def _aggregate_models(self):
-    global_model_contribution_weight = 0
+    global_model_contribution_weight = 0  # first, take the whole model
     for client in self.current_round_clients:
       client_params = client.get_model_params()
       client_contribution_weight = client.training_data_size / self.curr_round_training_dataset_size
@@ -124,6 +125,7 @@ class Aggregator:
                                + global_model_contribution_weight * dict_global_model_params[name].data
             dict_global_model_params[name].data.copy_(averaged_weights)
 
+      # use the whole global model and a contribution fraction from the client's model
       global_model_contribution_weight = 1
 
   def _select_clients(self, current_round):
