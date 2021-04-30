@@ -10,7 +10,7 @@ class ExperimentConfig:
     ##########################
     self.batch_size = 128
     self.test_batch_size = 500
-    self.epochs = 2
+    self.epochs = 10
     self.lr = 0.02
     self.gamma = 0.7
     self.weight_decay = 5e-4
@@ -26,15 +26,15 @@ class ExperimentConfig:
     # MSDP
     ##########################
     # Stage 1
-    self.eps1 = 0.1
+    self.eps1 = 5
 
     # Stage 2
-    self.noise_multiplier = 1
-    self.max_grad_norm = 3
+    self.noise_multiplier = 0.3
+    self.max_grad_norm = 2
     self.virtual_batches = 1
 
     # Stage 3
-    self.eps3 = 1
+    self.eps3 = 20
     self.max_weight_norm = 20
 
     # Stage 4

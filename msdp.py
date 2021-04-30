@@ -137,7 +137,7 @@ class MSPDTrainer:
 
     # Inject noise to data
     if Stages.STAGE_1 in self.stages and not hasattr(self.train_loader, 'stage_1_attached'):
-      self._stage_1_noise(loaders)
+      self._stage_1_noise([self.train_loader])
 
     # Wrap the optimizer to perform DP training
     if Stages.STAGE_2 in self.stages:
@@ -166,8 +166,6 @@ class MSPDTrainer:
     if hasattr(self, 'test_loader'):
       self.log("Started testing...")
       loader = self.test_loader
-      if not (hasattr(loader, 'stage_1_attached') and loader.stage_1_attached) and Stages.STAGE_1 in self.stages:
-        self._stage_1_noise([loader])
 
       self.model.to(self.device)
       results = self.trainer.test(self.model, loader)
@@ -199,7 +197,7 @@ class MSPDTrainer:
 
   def _stage_1_noise(self, loaders):
     for i, loader in enumerate(loaders):
-      self.stages[Stages.STAGE_1].apply(loader)
+      self.stages[Stages.STAGE_1].apply(loader, self.epochs)
 
   def _stage_3_noise(self):
     self.stages[Stages.STAGE_3].apply(self.model, len(self.train_loader.dataset))

@@ -118,10 +118,10 @@ class Stage1(DPStage):
     if max_grad_norm and isinstance(max_grad_norm, list):
       self.max_grad_norm = np.array(max_grad_norm).mean()
 
-  def apply(self, data_loader: DataLoader) -> DataLoader:
+  def apply(self, data_loader: DataLoader, epochs: Optional[int] = 1) -> DataLoader:
     dataset = torch.tensor(np.moveaxis(data_loader.dataset.data, -1, 1)).float()
 
-    noised_data = self._perturb_dataset(dataset) if self.max_grad_norm \
+    noised_data = self._perturb_dataset(dataset, epochs) if self.max_grad_norm \
       else self._perturb_dataset_with_sensitivity(dataset)
 
     dataset = np.moveaxis(noised_data.numpy(), 1, -1)
@@ -130,19 +130,14 @@ class Stage1(DPStage):
     data_loader.stage_1_attached = True
     return data_loader
 
-  def _perturb_dataset(self, dataset: torch.Tensor) -> torch.Tensor:
+  def _perturb_dataset(self, dataset: torch.Tensor, epochs: int) -> torch.Tensor:
     """
-      Based on -> https://arxiv.org/abs/1710.07425
+      Based on -> https://arxiv.org/abs/2002.08570
     """
     n = len(dataset)
     delta = 1 / (2 * len(dataset))
-    a = np.sqrt(np.log(2 / delta) / n)
-    d = dataset[0].dim()
-    std = np.sqrt(2 * d * a) * self.max_grad_norm
-    std += np.sqrt(2 * d * a ** 2 * self.max_grad_norm ** 2 + 2 * self.max_grad_norm * (1 - 2 * a) / self.eps)
-    std /= (1 - 2 * a)
-    ldp_e = np.sqrt(n) * self.eps
-    self.log(f"Input perturbation: ({ldp_e:.2f}, {delta:.2e})-LDP with std={std:.2e}, ({self.eps}, {delta})-DP")
+    std = self.max_grad_norm * np.sqrt(epochs * np.log(1/delta) / n * (n - 1)) / self.eps
+    self.log(f"Input perturbation: std={std:.2e}, ({self.eps}, {delta})-DP")
     noise = torch.normal(0, std, size=dataset.shape)
     dataset += noise
     return dataset
@@ -150,6 +145,7 @@ class Stage1(DPStage):
   def _perturb_dataset_with_sensitivity(self, dataset: torch.Tensor) -> torch.Tensor:
     """
     Based on -> https://www.cis.upenn.edu/~aaroth/Papers/privacybook.pdf
+             -> http://www.cs.cmu.edu/~anupamd/paper/NDSS2016.pdf
     """
     delta = 1 / (1.5 * len(dataset))
     sensitivity = self._get_sensitivity(dataset)

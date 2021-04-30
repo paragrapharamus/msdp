@@ -1,7 +1,6 @@
 import copy
 import sys
 
-import numpy
 import torch
 import time
 import tqdm
@@ -171,7 +170,7 @@ class TorchWrapper(object):
     self.optimizer_.zero_grad()
 
     # Forward pass.
-    outputs = self.module_(inputs)
+    outputs = self.module_(inputs.float())
     _, preds = torch.max(outputs.data, 1)
 
     # Calculating the loss.

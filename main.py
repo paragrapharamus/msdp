@@ -5,13 +5,14 @@ from copy import deepcopy
 
 import pytorch_lightning as pl
 import torch
+from torch import nn
 from torch.utils.data import random_split
 
-from attacks import model_extraction, membership_inference
+from attacks import model_extraction, membership_inference_black_box, membership_inference_mia, model_extraction_2
 from datasets.dataset_util import *
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
-from models import Cifar10Net
+from models import Cifar10Net, AttackModel
 from msdp import MSPDTrainer
 from dp_stages import Stages
 from config import ExperimentConfig
@@ -35,56 +36,11 @@ def train(args):
                         )
 
   # trainer.attach_stage(Stages.STAGE_1, {'eps': args.eps1, 'max_grad_norm': args.max_grad_norm})
-  trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
+  # trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': args.noise_multiplier, 'max_grad_norm': args.max_grad_norm})
   # trainer.attach_stage(Stages.STAGE_3, {'eps': args.eps3, 'max_weight_norm': args.max_weight_norm})
 
   model = trainer.train_and_test()
   return model
-
-
-def attack_model(model, num_data=10000):
-  def truncate(ds, size):
-    idxs = np.random.permutation(len(ds))[:size]
-    ds.data = ds.data[idxs]
-    ds.targets = np.array(ds.targets)[idxs]
-    return ds
-
-  # Obtain seed (or public) data to be used in extraction
-  train_dataset, test_dataset = get_cifar10_dataset(validation_dataset=False)
-  train_dataset = truncate(train_dataset, num_data // 2)
-  test_dataset = truncate(test_dataset, num_data // 2)
-  dataset = merge_datasets(train_dataset, test_dataset)
-
-  split_ratio = 0.1
-  train_data, test_data = random_split(dataset,
-                                       [int((1 - split_ratio) * len(dataset)),
-                                        int(split_ratio * len(dataset))])
-  train_data = [train_data.dataset[i] for i in train_data.indices]
-  test_data = [test_data.dataset[i] for i in test_data.indices]
-
-  data_shape = (1, 3, 32, 32)
-
-  # model_extraction(model=model,
-  #                  query_limit=num_data,
-  #                  victim_input_shape=data_shape,
-  #                  number_of_targets=10,
-  #                  attacker_input_shape=data_shape,
-  #                  synthesizer_name="copycat",
-  #                  substitute_architecture=Cifar10Net,
-  #                  attack_train_data=train_data,
-  #                  attack_test_data=test_data,
-  #                  max_epochs=30)
-
-  membership_inference(model=model,
-                       query_limit=num_data,
-                       victim_input_shape=data_shape,
-                       number_of_targets=10,
-                       attacker_input_shape=data_shape,
-                       synthesizer_name="copycat",
-                       substitute_architecture=Cifar10Net,
-                       attack_train_data=train_data,
-                       attack_test_data=test_data,
-                       max_epochs=25)
 
 
 def train_opacus(args):
@@ -108,7 +64,7 @@ def main():
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
-  # train_dataset, test_dataset = get_dataset('cifar10', False)
+  train_dataset, test_dataset = get_dataset('cifar10', False)
   # args.experiment_id = _get_next_available_dir('./lightning_logs', 'experiment', False, False)
   # FLEnvironment(model_class=Cifar10Net,
   #               train_dataset=train_dataset,
@@ -124,9 +80,56 @@ def main():
   #               alpha=10,
   #               args=args)
 
-  model = train(args)
-  # model = Cifar10Net.load_from_checkpoint('checkpoints_opacus_private/opacus_model.pth')
-  # attack_model(model)
+  # model = train(args)
+  model = Cifar10Net.load_from_checkpoint('checkpoints_8/checkpoint-epoch=05-valid_acc=0.72.ckpt').to(device)
+  # membership_inference_mia(model=model,
+  #                      model_cls=Cifar10Net,
+  #                      attack_model_cls=AttackModel,
+  #                      num_classes=10,
+  #                      train_dataset=train_dataset,
+  #                      test_dataset=test_dataset,
+  #                      shadow_epochs=10,
+  #                      shadow_dataset_size=4500,
+  #                      attack_test_dataset_size=4000,
+  #                      num_shadows=3,
+  #                      attack_epochs=20,
+  #                      seed=args.seed,
+  #                      use_cuda=True)
+
+  # membership_inference_black_box(model=model,
+  #                                loss=nn.CrossEntropyLoss(),
+  #                                optimizer_class=torch.optim.Adam,
+  #                                train_dataset=train_dataset,
+  #                                test_dataset=test_dataset,
+  #                                input_shape=(3, 32, 32),
+  #                                num_classes=10,
+  #                                attack_train_ratio=0.5,
+  #                                attack_test_ratio=0.5,
+  #                                )
+
+  model_extraction_2(model=model,
+                     attack_model_cls=Cifar10Net,
+                     loss=nn.CrossEntropyLoss(),
+                     optimizer_class=torch.optim.Adam,
+                     input_shape=(3, 32, 32),
+                     num_classes=10,
+                     test_dataset=test_dataset,
+                     batch_size=args.batch_size,
+                     epochs=5,
+                     query_limit=9000,
+                     )
+
+  # model_extraction(model=model,
+  #                  train_dataset=train_dataset,
+  #                  test_dataset=test_dataset,
+  #                  query_limit=len(test_dataset),
+  #                  victim_input_shape=(1, 3, 32, 32),
+  #                  num_classes=10,
+  #                  attacker_input_shape=(1, 3, 32, 32),
+  #                  synthesizer_name='copycat',
+  #                  substitute_architecture=Cifar10Net,
+  #                  max_epochs=25
+  #                  )
   # train_opacus(args)
 
 
