@@ -21,7 +21,7 @@ class Cifar10Net(pl.LightningModule):
       nn.ReLU(True),
       nn.MaxPool2d(2),
       nn.Conv2d(128, NUM_CLASSES, kernel_size=4),
-      nn.LogSoftmax(dim=1)
+      # nn.LogSoftmax(dim=1)
     )
 
     self.train_acc = pl.metrics.Accuracy()

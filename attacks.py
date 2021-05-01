@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from art.attacks.extraction import KnockoffNets
 from art.attacks.inference.membership_inference import MembershipInferenceBlackBox
 from art.estimators.classification.pytorch import PyTorchClassifier
 from libs.PrivacyRaven.src.privacyraven.extraction.core import ModelExtractionAttack
@@ -12,11 +13,17 @@ from libs.PrivacyRaven.src.privacyraven.models.victim import convert_to_inferenc
 from libs.PrivacyRaven.src.privacyraven.utils.query import get_target
 from sklearn.model_selection import train_test_split
 from torch.utils.data import random_split, Dataset
-from art.attacks import ExtractionAttack
-from art.attacks.extraction import CopycatCNN, KnockoffNets
+
 from datasets.dataset_util import merge_datasets
 from libs.mia.estimators import ShadowModelBundle, AttackModelBundle, prepare_attack_data
 from libs.mia.wrappers import TorchWrapper
+
+
+def log(msg, logger=None):
+  if logger:
+    logger.log(msg)
+  else:
+    print(msg)
 
 
 def model_extraction_knockoffnets(model: pl.LightningModule,
@@ -28,8 +35,10 @@ def model_extraction_knockoffnets(model: pl.LightningModule,
                                   batch_size: int,
                                   epochs: int,
                                   query_limit: int,
-                                  test_dataset: Dataset
+                                  test_dataset: Dataset,
+                                  logger=None
                                   ):
+  log("KnockOffNets Model extraction attack has started...", logger)
   if len(input_shape) == 4:
     input_shape = input_shape[1:]
 
@@ -58,13 +67,13 @@ def model_extraction_knockoffnets(model: pl.LightningModule,
                                       input_shape=input_shape,
                                       nb_classes=num_classes
                                       )
-  print("Stealing the model...")
+  log("Stealing the model...", logger)
   extracted_model = attack.extract(X_steal, y_steal, thieved_classifier=extracted_model)
-  print("Testing...")
+  log("Testing...", logger)
   victim_model_preds = np.argmax(victim_model.predict(X_test), axis=1)
   extracted_model_preds = np.argmax(extracted_model.predict(X_test), axis=1)
   acc = np.sum(victim_model_preds == extracted_model_preds) / len(y_test)
-  print(f"Extraction fidelity: {100 * acc:.2f}%")
+  log(f"Extraction fidelity: {100 * acc:.2f}%", logger)
   return acc
 
 
@@ -77,8 +86,10 @@ def model_extraction(model: pl.LightningModule,
                      attacker_input_shape: Tuple[int, ...],
                      synthesizer_name: str,
                      substitute_architecture: Type[pl.LightningModule],
-                     max_epochs: int
+                     max_epochs: int,
+                     logger=None
                      ):
+  log('Model extraction has started...', logger)
   # The victim model
   model = convert_to_inference(model)
 
@@ -116,9 +127,12 @@ def model_extraction(model: pl.LightningModule,
     np.prod(attacker_input_shape),
     attack_train_data,
     attack_test_data,
-    max_epochs=max_epochs
+    max_epochs=max_epochs,
+    trainer_args={'progress_bar_refresh_rate': 0,
+                  'weights_summary': None}
   )
-  # print(attack.__dict__)
+  log(f"Model extraction fidelity: {attack.label_agreement * 100:.2f}", logger)
+  # log(attack.__dict__)
 
 
 def membership_inference_black_box(model: pl.LightningModule,
@@ -131,9 +145,10 @@ def membership_inference_black_box(model: pl.LightningModule,
                                    attack_train_ratio: float,
                                    attack_test_ratio: float,
                                    attack_model_type: Optional[str] = 'rf',
-                                   attack_model: Optional[Any] = None
+                                   attack_model: Optional[Any] = None,
+                                   logger=None
                                    ):
-
+  log('Membership Inference attack...', logger)
   if len(input_shape) == 4:
     input_shape = input_shape[1:]
 
@@ -152,14 +167,14 @@ def membership_inference_black_box(model: pl.LightningModule,
   x_test, y_test = np.moveaxis(test_dataset.data, -1, 1), np.array(test_dataset.targets)
 
   # Train the attack model
-  print('Training the attack model...')
+  log('Training the attack model...', logger)
   attack_train_size = int(len(train_dataset) * attack_train_ratio)
   attack_test_size = int(len(test_dataset) * attack_test_ratio)
   bb_atack.fit(x_train[:attack_train_size].astype(np.float32), y_train[:attack_train_size],
                x_test[:attack_test_size].astype(np.float32), y_test[:attack_test_size])
 
   # Infer on member and non-member data
-  print('Attack the target model model...')
+  log('Attack the target model model...', logger)
   train_members = bb_atack.infer(x_train.astype(np.float32), y_train)
   test_members = bb_atack.infer(x_test.astype(np.float32), y_test)
 
@@ -169,13 +184,13 @@ def membership_inference_black_box(model: pl.LightningModule,
 
   attack_acc = (train_acc_attack * len(train_members) + test_acc_attack * len(test_members)) / \
                (len(train_members) + len(test_members))
-  print(f"MIA accuracy on training data {train_acc_attack}")
-  print(f"MIA accuracy on test data {test_acc_attack}")
+  log(f"MIA accuracy on training data {train_acc_attack}", logger)
+  log(f"MIA accuracy on test data {test_acc_attack}", logger)
 
   p, r = _calc_precision_recall(np.concatenate((train_members, test_members)),
                                 np.concatenate((np.ones(len(train_members)), np.zeros(len(train_members)))))
 
-  print(f"MIA accuracy: {attack_acc:.3f}, precision: {p:.3f}, recall: {r:.3f}")
+  log(f"MIA accuracy: {attack_acc:.3f}, precision: {p:.3f}, recall: {r:.3f}", logger)
   return attack_acc, p, r
 
 
@@ -191,7 +206,8 @@ def membership_inference_mia(model: pl.LightningModule,
                              num_shadows: int,
                              attack_epochs: int,
                              seed: int,
-                             use_cuda: bool = True
+                             use_cuda: bool = True,
+                             logger=None
                              ):
   def get_target_model():
     optimizer_cls = optim.Adam
@@ -227,7 +243,7 @@ def membership_inference_mia(model: pl.LightningModule,
   X_test, y_test = np.moveaxis(test_dataset.data, -1, 1), np.array(test_dataset.targets)
 
   target_model = get_target_model()
-  print('Loading the victim model')
+  log('Loading the victim model', logger)
   target_model.module_.load_state_dict(model.state_dict())
 
   # Building the shadows
@@ -242,9 +258,9 @@ def membership_inference_mia(model: pl.LightningModule,
   (attacker_X_train, attacker_X_test,
    attacker_y_train, attacker_y_test) = train_test_split(X_test, y_test, test_size=0.1)
 
-  print(f'Attacker dataset shapes -> {attacker_X_train.shape, attacker_X_test.shape}')
+  log(f'Attacker dataset shapes -> {attacker_X_train.shape, attacker_X_test.shape}', logger)
 
-  print("Training the shadow models...")
+  log("Training the shadow models...", logger)
   X_shadow, y_shadow = smb.fit_transform(
     attacker_X_train,
     attacker_y_train,
@@ -261,7 +277,7 @@ def membership_inference_mia(model: pl.LightningModule,
                           class_one_hot_coded=False)
 
   # Fit the attack models.
-  print("Training the attack models...")
+  log("Training the attack models...", logger)
   amb.fit(X_shadow, y_shadow,
           fit_kwargs=dict(epochs=attack_epochs, verbose=True))
 
@@ -279,7 +295,7 @@ def membership_inference_mia(model: pl.LightningModule,
   attack_guesses = amb.predict(attack_test_data)
   attack_accuracy = np.mean(attack_guesses == real_membership_labels)
 
-  print(f"MIA accuracy: ", attack_accuracy)
+  log(f"MIA accuracy: {attack_accuracy}", logger)
   return attack_accuracy
 
 

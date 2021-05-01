@@ -8,9 +8,9 @@ class ExperimentConfig:
     ##########################
     # Client training
     ##########################
-    self.batch_size = 128
-    self.test_batch_size = 500
-    self.epochs = 10
+    self.batch_size = 256
+    self.test_batch_size = 1000
+    self.epochs = 15
     self.lr = 0.02
     self.gamma = 0.7
     self.weight_decay = 5e-4
@@ -29,8 +29,8 @@ class ExperimentConfig:
     self.eps1 = 5
 
     # Stage 2
-    self.noise_multiplier = 0.3
-    self.max_grad_norm = 2
+    self.noise_multiplier = 0.5
+    self.max_grad_norm = 6
     self.virtual_batches = 1
 
     # Stage 3
@@ -39,7 +39,7 @@ class ExperimentConfig:
 
     # Stage 4
     self.eps4 = 1
-    self.max_weight_norm_aggregated = 2
+    self.max_weight_norm_aggregated = 20
 
     ##########################
     # FL arguments
@@ -55,6 +55,12 @@ class ExperimentConfig:
     ##########################
     # Enable Attacks
     ##########################
-    self.membership_inference = False
-    self.model_extraction = False
+    self.membership_inference = True
+    self.model_extraction = True
     self.knockoffnet_extraction = False
+
+  def __repr__(self):
+    s = ''
+    for k, v in self.__dict__.items():
+      s += f'{k}: {v}\n'
+    return s

@@ -1,3 +1,6 @@
+import json
+from typing import Type
+
 import os
 import warnings
 
@@ -11,6 +14,7 @@ from dp.opacus_dp import opacus_training
 from dp_stages import Stages
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
+from log import Logger
 from models import Cifar10Net
 from msdp import MSPDTrainer
 
@@ -24,6 +28,7 @@ def _set_seed(seed=42):
 def expertiment(exp):
   def decorator():
     _set_seed(42)
+    print(exp.__name__)
     exp()
 
   return decorator
@@ -32,13 +37,15 @@ def expertiment(exp):
 def attack_model(args: ExperimentConfig,
                  device: torch.device,
                  dataset_name: str,
-                 model=None,
-                 checkpoint_path=None,
-                 architecture=None):
+                 architecture: Type[pl.LightningModule],
+                 model: pl.LightningModule = None,
+                 checkpoint_path: str = None,
+                 logger: Logger = None):
   if not model:
-    model = architecture.load_from_checkpoint(checkpoint_path).to(device)
+    model = architecture.load_from_checkpoint(checkpoint_path)
+  model = model.to(device)
 
-  train_dataset, test_dataset = get_dataset(dataset_name, validation_dataset=False)
+  train_dataset, _, test_dataset = get_dataset(dataset_name)
 
   if args.membership_inference:
     membership_inference_black_box(model=model,
@@ -50,6 +57,7 @@ def attack_model(args: ExperimentConfig,
                                    num_classes=train_dataset.num_classes,
                                    attack_train_ratio=0.5,
                                    attack_test_ratio=0.5,
+                                   logger=logger
                                    )
   if args.model_extraction:
     model_extraction(model=model,
@@ -61,7 +69,8 @@ def attack_model(args: ExperimentConfig,
                      attacker_input_shape=train_dataset.input_shape,
                      synthesizer_name='copycat',
                      substitute_architecture=architecture,
-                     max_epochs=25
+                     max_epochs=25,
+                     logger=logger
                      )
 
   if args.knockoffnet_extraction:
@@ -75,12 +84,15 @@ def attack_model(args: ExperimentConfig,
                                   batch_size=args.batch_size,
                                   epochs=5,
                                   query_limit=9000,
+                                  logger=logger
                                   )
 
 
 @expertiment
 def non_private_training_on_cifar10():
   args = ExperimentConfig()
+  args.name = "Non private training on CIFAR10"
+
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -96,14 +108,17 @@ def non_private_training_on_cifar10():
                         device=device,
                         save_checkpoint=True
                         )
-  model = trainer.train_and_test()
+  trainer.logger.log(args)
 
-  attack_model(args, device, 'cifar10', model)
+  model = trainer.train_and_test()
+  attack_model(args, device, 'cifar10', Cifar10Net, model, logger=trainer.logger)
 
 
 @expertiment
-def msdp_training_on_cifar10(stage_1=True, stage_2=True, stage_3=True):
+def msdp_training_on_cifar10(stage_1=True, stage_2=False, stage_3=False):
   args = ExperimentConfig()
+  args.name = f"MSDP on CIFAR10, Stage1={stage_1}, Stage2={stage_2}, Stage3={stage_3}"
+
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -119,38 +134,46 @@ def msdp_training_on_cifar10(stage_1=True, stage_2=True, stage_3=True):
                         device=device,
                         save_checkpoint=True
                         )
+
+  trainer.logger.log(args)
+
   if stage_1:
     trainer.attach_stage(Stages.STAGE_1,
                          {'eps': args.eps1,
                           'max_grad_norm': args.max_grad_norm})
-  if stage_2:
-    trainer.attach_stage(Stages.STAGE_2,
-                         {'noise_multiplier': args.noise_multiplier,
-                          'max_grad_norm': args.max_grad_norm})
-  if stage_3:
-    trainer.attach_stage(Stages.STAGE_3,
-                         {'eps': args.eps3,
-                          'max_weight_norm': args.max_weight_norm})
+  # if stage_2:
+  #   trainer.attach_stage(Stages.STAGE_2,
+  #                        {'noise_multiplier': args.noise_multiplier,
+  #                         'max_grad_norm': args.max_grad_norm})
+  # if stage_3:
+  #   trainer.attach_stage(Stages.STAGE_3,
+  #                        {'eps': args.eps3,
+  #                         'max_weight_norm': args.max_weight_norm})
 
   model = trainer.train_and_test()
-  attack_model(args, device, 'cifar10', model)
+
+  attack_model(args, device, 'cifar10', Cifar10Net, model, logger=trainer.logger)
 
 
 @expertiment
 def opacus_training_on_cifar10():
   args = ExperimentConfig()
+  args.name = "Opacus training on CIFAR10"
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
   dataloaders = load_dataset('cifar10', args)
   model = Cifar10Net().to(device)
-  opacus_training(model, dataloaders, args)
+  model = opacus_training(model, dataloaders, args)
+
+  attack_model(args, device, 'cifar10', Cifar10Net, model)
 
 
 @expertiment
 def fl_simulation_on_cifar10():
   args = ExperimentConfig()
+  args.name = "FL Simulation on CIFAR10"
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
@@ -173,12 +196,12 @@ def fl_simulation_on_cifar10():
 
   model = fl_simulator.get_model()
 
-  attack_model(args, device, 'cifar10', model)
+  attack_model(args, device, 'cifar10', Cifar10Net, model, logger=fl_simulator.logger)
 
 
 def run_experiments():
   experiments = [
-    non_private_training_on_cifar10
+    msdp_training_on_cifar10
   ]
 
   for exp in experiments:
@@ -200,6 +223,20 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
     return f"{dir_name}_{dir_id}"
 
 
+def attack_test():
+  _set_seed()
+  args = ExperimentConfig()
+
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
+
+  args.membership_inference = True
+  args.model_extraction = True
+
+  attack_model(args, device, 'cifar10', architecture=Cifar10Net, checkpoint_path='out/checkpoints_2/checkpoint-epoch=14-valid_acc=0.68.ckpt')
+
+
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
   run_experiments()
+  # attack_test()

@@ -126,7 +126,8 @@ class MSPDTrainer:
                               logger=self.tensorboardlogger,
                               callbacks=self.trainer_callbacks,
                               progress_bar_refresh_rate=0,
-                              accumulate_grad_batches=self.virtual_batches)
+                              accumulate_grad_batches=self.virtual_batches,
+                              deterministic=True)
 
     self.model.to(self.device)
 
