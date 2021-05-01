@@ -8,6 +8,18 @@ from torchvision import datasets
 from torchvision import transforms
 
 
+class Cifar10Dataset(datasets.CIFAR10):
+  transform_trainval = transforms.Compose([transforms.ToTensor(),
+                                           transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
+                                                                std=[0.2023, 0.1994, 0.2010])])
+  transform_test = transforms.Compose([transforms.ToTensor(),
+                                       transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                                            std=[0.229, 0.224, 0.225])])
+
+  input_shape = (1, 3, 32, 32)
+  num_classes = 10
+
+
 def load_dataset(dataset_name, args):
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   train_kwargs = {"batch_size": args.batch_size}
@@ -33,31 +45,12 @@ def get_dataset(dataset_name, validation_dataset=True):
     raise NotImplementedError('Unsupported dataset')
 
 
-def get_dataset_transform(dataset_name):
-  if dataset_name == 'cifar10':
-    return get_cifar10_transforms()
-  else:
-    raise NotImplementedError('Unsupported dataset')
-
-
-def get_cifar10_transforms():
-  transform_trainval = transforms.Compose([transforms.ToTensor(),
-                                           transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-                                                                std=[0.2023, 0.1994, 0.2010])])
-  transform_test = transforms.Compose([transforms.ToTensor(),
-                                       transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                                            std=[0.229, 0.224, 0.225])])
-  return transform_trainval, transform_test
-
-
 def get_cifar10_dataset(validation_dataset=True):
-  transform_trainval, transform_test = get_cifar10_transforms()
-
-  train_dataset = datasets.CIFAR10("../data", train=True, download=True, transform=transform_trainval)
-  test_dataset = datasets.CIFAR10("../data", train=False, transform=transform_test)
+  train_dataset = Cifar10Dataset("../data", train=True, download=True, transform=Cifar10Dataset.transform_trainval)
+  test_dataset = Cifar10Dataset("../data", train=False, transform=Cifar10Dataset.transform_test)
 
   if validation_dataset:
-    valid_dataset = datasets.CIFAR10("../data", train=True, download=True, transform=transform_trainval)
+    train_dataset, valid_dataset = train_test_split(train_dataset, shuffle=True)
     return train_dataset, valid_dataset, test_dataset
   else:
     return train_dataset, test_dataset
@@ -90,7 +83,9 @@ def merge_datasets(ds1: Dataset, ds2: Dataset):
 
 def train_test_split(dataset: Dataset,
                      test_split_ratio: Optional[Union[float, bool]] = 0.1,
-                     shuffle=False):
+                     shuffle: bool = False,
+                     seed: int = 42
+                     ):
   dataset_size = len(dataset)
   if isinstance(test_split_ratio, bool):
     test_split_ratio = 0.1
@@ -101,7 +96,7 @@ def train_test_split(dataset: Dataset,
       else 1 - test_split_ratio
 
   if shuffle:
-    indices = np.random.permutation(dataset_size)
+    indices = np.random.RandomState(seed=seed).permutation(dataset_size)
     dataset.data = dataset.data[indices]
     if not isinstance(dataset.targets, np.ndarray):
       dataset.targets = np.array(dataset.targets)
@@ -118,8 +113,7 @@ def train_test_split(dataset: Dataset,
 
 
 def load_cifar10(test_kwargs, train_kwargs):
-  train_dataset, test_dataset = get_cifar10_dataset(validation_dataset=False)
-  train_dataset, valid_dataset = train_test_split(train_dataset, shuffle=True)
+  train_dataset, valid_dataset, test_dataset = get_cifar10_dataset(validation_dataset=True)
   # Define the data loaders
   valid_kwargs = test_kwargs.copy()
   train_loader = DataLoader(train_dataset, **train_kwargs)
@@ -139,7 +133,7 @@ def build_truncated_dataset(dataset_name: str,
   """
 
   if dataset_name == 'cifar10':
-    dataset_class = datasets.CIFAR10
+    dataset_class = Cifar10Dataset
   elif dataset_name == 'mnist':
     dataset_class = datasets.MNIST
   else:

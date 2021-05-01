@@ -51,3 +51,10 @@ class ExperimentConfig:
     self.partition_method = 'heterogeneous'
     self.alpha = 20
     self.client_local_test_split = 0.1
+
+    ##########################
+    # Enable Attacks
+    ##########################
+    self.membership_inference = False
+    self.model_extraction = False
+    self.knockoffnet_extraction = False

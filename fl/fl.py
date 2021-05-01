@@ -97,6 +97,9 @@ class FLEnvironment:
   def log(self, *msg):
     self.logger.log(*msg, module='FLEnv')
 
+  def get_model(self):
+    return self.aggregator.model
+
   def _init_clients(self, model_class: Type[pl.LightningModule],
                     optimizer_class: torch.optim,
                     training_data_splits: Dict[int, Dataset],

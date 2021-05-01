@@ -209,3 +209,4 @@ def opacus_training(model, dataloaders, global_args):
 
   top1_acc = _test('Test', model, test_loader, device)
   print(f"Test set accuracy: {top1_acc:.2f}")
+  return model

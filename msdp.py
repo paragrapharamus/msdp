@@ -48,10 +48,12 @@ class MSPDTrainer:
     self.model = model
 
     self.trainer_callbacks = None
+    self.checkpoint_dir = None
     if save_checkpoint:
+      self.checkpoint_dir = self._get_next_available_dir(os.path.join(os.getcwd(), 'out'), 'checkpoints')
       checkpoint_callback = ModelCheckpoint(
         monitor='valid_acc_epoch',
-        dirpath=self._get_next_available_dir(os.getcwd(), 'checkpoints'),
+        dirpath=self.checkpoint_dir,
         filename='checkpoint-{epoch:02d}-{valid_acc:.2f}',
         save_top_k=-1,
         mode='max',
@@ -61,7 +63,7 @@ class MSPDTrainer:
     self.trainer = None
 
     # creating the TensorBoard logging
-    __logs_dir = './lightning_logs'
+    __logs_dir = 'out/lightning_logs'
     if not experiment_id:
       experiment_id = self._get_next_available_dir(__logs_dir, 'experiment', False, False)
     self.tensorboardlogger = TensorBoardLogger(save_dir=__logs_dir, version=self.id, name=experiment_id)
@@ -90,7 +92,8 @@ class MSPDTrainer:
 
     self.logger = logger
     if logger is None:
-      self.logger = Logger([sys.stdout, './msdp.log'])
+      d = self.checkpoint_dir if self.checkpoint_dir else '.'
+      self.logger = Logger([sys.stdout, f'{d}/msdp.log'])
       self.model.personal_log = self.log
 
   def attach_stage(self, stage_type: Stages, stage_param_dict: dict):

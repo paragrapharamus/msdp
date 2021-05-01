@@ -30,6 +30,9 @@ def model_extraction_knockoffnets(model: pl.LightningModule,
                                   query_limit: int,
                                   test_dataset: Dataset
                                   ):
+  if len(input_shape) == 4:
+    input_shape = input_shape[1:]
+
   victim_model = PyTorchClassifier(model=model,
                                    loss=loss,
                                    optimizer=optimizer_class(model.parameters()),
@@ -130,6 +133,10 @@ def membership_inference_black_box(model: pl.LightningModule,
                                    attack_model_type: Optional[str] = 'rf',
                                    attack_model: Optional[Any] = None
                                    ):
+
+  if len(input_shape) == 4:
+    input_shape = input_shape[1:]
+
   art_model = PyTorchClassifier(model=model,
                                 loss=loss,
                                 optimizer=optimizer_class(model.parameters()),
