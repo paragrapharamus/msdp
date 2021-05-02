@@ -258,7 +258,7 @@ class Stage3(DPStage):
     delta = 1 / (1.5 * training_dataset_size)
     # The standard deviation of the Gaussian noise. This is not calibrated yet.
     std = (self.exposures * np.sqrt(2 * np.log(1.25 / delta))) / self.eps
-    self.log(f"Output Perturbation: ({self.eps:.2f}, {delta:.2e})-DP with std={std:.2e}")
+    self.log(f"Output Perturbation: ({self.eps:.2f}, {delta:.2e})-DP")  # with std={std:.2e}")
 
     # Sanitize the model's parameters to ensure privacy
     for i, p in enumerate(model.parameters()):

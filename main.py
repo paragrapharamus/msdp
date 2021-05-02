@@ -55,23 +55,28 @@ def attack_model(args: ExperimentConfig,
                                    test_dataset=test_dataset,
                                    input_shape=train_dataset.input_shape,
                                    num_classes=train_dataset.num_classes,
-                                   attack_train_ratio=0.5,
-                                   attack_test_ratio=0.5,
+                                   attack_train_size=5000,
+                                   attack_test_size=5000,
                                    logger=logger
                                    )
   if args.model_extraction:
-    model_extraction(model=model,
-                     train_dataset=train_dataset,
-                     test_dataset=test_dataset,
-                     query_limit=len(test_dataset),
-                     victim_input_shape=train_dataset.input_shape,
-                     num_classes=train_dataset.num_classes,
-                     attacker_input_shape=train_dataset.input_shape,
-                     synthesizer_name='copycat',
-                     substitute_architecture=architecture,
-                     max_epochs=25,
-                     logger=logger
-                     )
+    fidelity = 0
+    runs = 3
+    for _ in range(runs):
+      fidelity += model_extraction(model=model,
+                                   train_dataset=train_dataset,
+                                   test_dataset=test_dataset,
+                                   query_limit=len(test_dataset),
+                                   victim_input_shape=train_dataset.input_shape,
+                                   num_classes=train_dataset.num_classes,
+                                   attacker_input_shape=train_dataset.input_shape,
+                                   synthesizer_name='copycat',
+                                   substitute_architecture=architecture,
+                                   max_epochs=25,
+                                   logger=logger
+                                   )
+    msg = f"Model extraction AVERAGE fidelity: {100 * fidelity / runs:.2f}"
+    logger.log(msg) if logger else print(msg)
 
   if args.knockoffnet_extraction:
     model_extraction_knockoffnets(model=model,
@@ -141,14 +146,14 @@ def msdp_training_on_cifar10(stage_1=True, stage_2=False, stage_3=False):
     trainer.attach_stage(Stages.STAGE_1,
                          {'eps': args.eps1,
                           'max_grad_norm': args.max_grad_norm})
-  # if stage_2:
-  #   trainer.attach_stage(Stages.STAGE_2,
-  #                        {'noise_multiplier': args.noise_multiplier,
-  #                         'max_grad_norm': args.max_grad_norm})
-  # if stage_3:
-  #   trainer.attach_stage(Stages.STAGE_3,
-  #                        {'eps': args.eps3,
-  #                         'max_weight_norm': args.max_weight_norm})
+  if stage_2:
+    trainer.attach_stage(Stages.STAGE_2,
+                         {'noise_multiplier': args.noise_multiplier,
+                          'max_grad_norm': args.max_grad_norm})
+  if stage_3:
+    trainer.attach_stage(Stages.STAGE_3,
+                         {'eps': args.eps3,
+                          'max_weight_norm': args.max_weight_norm})
 
   model = trainer.train_and_test()
 
@@ -180,18 +185,20 @@ def fl_simulation_on_cifar10():
 
   train_dataset, test_dataset = get_dataset('cifar10', False)
   args.experiment_id = _get_next_available_dir('out/lightning_logs', 'experiment', False, False)
+
+  args.save_model_path = _get_next_available_dir('out/', 'checkpoints', True, True)
   fl_simulator = FLEnvironment(model_class=Cifar10Net,
                                train_dataset=train_dataset,
                                test_dataset=test_dataset,
-                               num_clients=2,
+                               num_clients=args.num_clients,
                                aggregator_class=Aggregator,
-                               rounds=1,
+                               rounds=args.num_rounds,
                                device=device,
                                client_optimizer_class=torch.optim.SGD,
-                               clients_per_round=0,
-                               client_local_test_split=0.1,
-                               partition_method='homogeneous',
-                               alpha=10,
+                               clients_per_round=args.clients_per_round,
+                               client_local_test_split=args.client_local_test_split,
+                               partition_method=args.partition_method,
+                               alpha=args.alpha,
                                args=args)
 
   model = fl_simulator.get_model()
@@ -201,7 +208,8 @@ def fl_simulation_on_cifar10():
 
 def run_experiments():
   experiments = [
-    msdp_training_on_cifar10
+    # msdp_training_on_cifar10
+    fl_simulation_on_cifar10
   ]
 
   for exp in experiments:
@@ -230,10 +238,13 @@ def attack_test():
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
-  args.membership_inference = True
+  args.membership_inference = False
   args.model_extraction = True
 
-  attack_model(args, device, 'cifar10', architecture=Cifar10Net, checkpoint_path='out/checkpoints_2/checkpoint-epoch=14-valid_acc=0.68.ckpt')
+  # attack_model(args, device, 'cifar10', architecture=Cifar10Net,
+  #              checkpoint_path='out/checkpoints_9/checkpoint-epoch=14-valid_acc=0.58.ckpt')
+
+  attack_model(args, device, 'cifar10', architecture=Cifar10Net, model=Cifar10Net())
 
 
 if __name__ == '__main__':

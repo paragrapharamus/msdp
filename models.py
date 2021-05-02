@@ -28,7 +28,10 @@ class Cifar10Net(pl.LightningModule):
     self.valid_acc = pl.metrics.Accuracy()
     self.test_acc = pl.metrics.Accuracy()
 
-    self.personal_log = None
+    self.personal_log_fn = None
+
+    self.training_losses = []
+    self.validation_accuracies = []
 
   @property
   def automatic_optimization(self) -> bool:
@@ -53,9 +56,10 @@ class Cifar10Net(pl.LightningModule):
   def training_epoch_end(self, outputs):
     accuracy = self.train_acc.compute()
     self.log('train_acc_epoch', accuracy)
-    if self.personal_log:
-      epoch_loss = torch.stack([x['train_loss'] for x in outputs]).mean()
-      self.personal_log(f"Train epoch {self.current_epoch} - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
+    epoch_loss = torch.stack([x['train_loss'] for x in outputs]).mean()
+    self.training_losses.append(epoch_loss.item())
+    if self.personal_log_fn:
+      self.personal_log_fn(f"Train epoch {self.current_epoch} - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
 
   def validation_step(self, batch, batch_idx):
     data, targets = batch
@@ -69,9 +73,9 @@ class Cifar10Net(pl.LightningModule):
   def validation_epoch_end(self, outputs):
     accuracy = self.valid_acc.compute()
     self.log('valid_acc_epoch', accuracy)
-    if self.personal_log:
+    if self.personal_log_fn:
       epoch_loss = torch.stack([x['valid_loss'] for x in outputs]).mean()
-      self.personal_log(f"Validation epoch {self.current_epoch} - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
+      self.personal_log_fn(f"Validation epoch {self.current_epoch} - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
 
   def test_step(self, batch, batch_idx):
     data, targets = batch
@@ -85,9 +89,9 @@ class Cifar10Net(pl.LightningModule):
   def test_epoch_end(self, outputs):
     accuracy = self.test_acc.compute()
     self.log('test_acc_epoch', accuracy)
-    if self.personal_log:
+    if self.personal_log_fn:
       epoch_loss = torch.stack([x['test_loss'] for x in outputs]).mean()
-      self.personal_log(f"Test - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
+      self.personal_log_fn(f"Test - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
 
   def add_optimizer(self, optimizer):
     self._optimizer = optimizer

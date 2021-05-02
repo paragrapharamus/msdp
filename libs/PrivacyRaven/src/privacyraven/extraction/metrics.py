@@ -12,18 +12,18 @@ def label_agreement(
     victim_input_shape,
     substitute_input_shape,
 ):
-    """Returns the number of agreed upon data points between victim and substitute,
-    thereby measuring the fidelity of an extraction attack"""
+  """Returns the number of agreed upon data points between victim and substitute,
+  thereby measuring the fidelity of an extraction attack"""
 
-    limit = int(len(test_data))
+  limit = int(len(test_data))
 
-    limit = min(1000, limit)
-    x_data, y_data = process_data(test_data, limit)
+  limit = min(1000, limit)
+  x_data, y_data = process_data(test_data, limit)
 
-    substitute_result = get_target(substitute_model, x_data, substitute_input_shape)
-    victim_result = query_victim(x_data)
+  substitute_result = get_target(substitute_model, x_data, substitute_input_shape)
+  victim_result = query_victim(x_data)
 
-    agreed = torch.sum(torch.eq(victim_result, substitute_result)).item()
+  agreed = torch.sum(torch.eq(victim_result, substitute_result)).item()
 
-    print(f"Fidelity: Out of {limit} data points, the models agreed upon {agreed}: {100 * agreed/limit:.2f}%")
-    return agreed
+  print(f"Fidelity: Out of {limit} data points, the models agreed upon {agreed}: {100 * agreed / limit:.2f}%")
+  return agreed / limit

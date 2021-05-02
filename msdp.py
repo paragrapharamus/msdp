@@ -2,6 +2,7 @@ import os
 import sys
 from typing import List, Union, Optional
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
@@ -50,23 +51,35 @@ class MSPDTrainer:
     self.trainer_callbacks = None
     self.checkpoint_dir = None
     if save_checkpoint:
-      self.checkpoint_dir = self._get_next_available_dir(os.path.join(os.getcwd(), 'out'), 'checkpoints')
+      self.checkpoint_dir = self._get_next_available_dir('out/', 'checkpoints',
+                                                         absolute_path=False)
       checkpoint_callback = ModelCheckpoint(
         monitor='valid_acc_epoch',
         dirpath=self.checkpoint_dir,
         filename='checkpoint-{epoch:02d}-{valid_acc:.2f}',
-        save_top_k=-1,
+        save_top_k=1,
         mode='max',
       )
       self.trainer_callbacks = [checkpoint_callback]
 
+    # Lazy init during training. Also, a new trainer instance must be created
+    # before each FL round, in case the this model is used during a FL simulation
     self.trainer = None
 
     # creating the TensorBoard logging
     __logs_dir = 'out/lightning_logs'
     if not experiment_id:
-      experiment_id = self._get_next_available_dir(__logs_dir, 'experiment', False, False)
-    self.tensorboardlogger = TensorBoardLogger(save_dir=__logs_dir, version=self.id, name=experiment_id)
+      experiment_id = self._get_next_available_dir(__logs_dir, 'experiment',
+                                                   False, False, False)
+    self.tensorboardlogger = TensorBoardLogger(save_dir=__logs_dir,
+                                               version=self.id,
+                                               name=experiment_id)
+
+    if not self.checkpoint_dir:
+      self.stat_dir = os.path.join(os.getcwd(),
+                                   __logs_dir,
+                                   experiment_id,
+                                   self.id)
 
     self.optimizer = optimizer
 
@@ -145,12 +158,12 @@ class MSPDTrainer:
 
     # Wrap the optimizer to perform DP training
     if Stages.STAGE_2 in self.stages:
-        self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model,
-                                                                   self.optimizer,
-                                                                   self.device,
-                                                                   self.batch_size,
-                                                                   len(self.train_loader.dataset),
-                                                                   self.virtual_batches))
+      self.model.add_optimizer(self.stages[Stages.STAGE_2].apply(self.model,
+                                                                 self.optimizer,
+                                                                 self.device,
+                                                                 self.batch_size,
+                                                                 len(self.train_loader.dataset),
+                                                                 self.virtual_batches))
 
     self.trainer.fit(self.model, *loaders)
 
@@ -162,6 +175,12 @@ class MSPDTrainer:
     # Inject noise to model's weights
     if Stages.STAGE_3 in self.stages:
       self._stage_3_noise()
+
+    if self.checkpoint_dir:
+      fp = os.path.join(self.checkpoint_dir, 'final.ckpt')
+      self.trainer.save_checkpoint(fp)
+
+    self._save_training_stats()
 
     self.model.cpu()
     return self.model
@@ -184,8 +203,36 @@ class MSPDTrainer:
   def update_optimizer(self, optimizer):
     self.optimizer = optimizer
 
+  def _save_training_stats(self):
+    training_losses = np.array(self.model.training_losses)
+    validation_accuracies = np.array(self.model.validation_accuracies)
+
+    file_id = f'{self.id}_plot_stats'
+    if self.checkpoint_dir:
+      fp = os.path.join(self.checkpoint_dir, file_id)
+    else:
+      fp = os.path.join(self.stat_dir, file_id)
+
+    np.save(fp, training_losses)
+    np.save(fp, validation_accuracies)
+
+  def _load_training_stats(self):
+    file_id = f'{self.id}_plot_stats'
+    if self.checkpoint_dir:
+      fp = os.path.join(self.checkpoint_dir, file_id)
+    else:
+      fp = os.path.join(os.getcwd(), file_id)
+
+    training_losses = np.load(fp)
+    validation_accuracies = np.load(fp)
+    return training_losses, validation_accuracies
+
   @staticmethod
-  def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
+  def _get_next_available_dir(root,
+                              dir_name,
+                              absolute_path=True,
+                              create=True,
+                              id=False):
     checkpoint_dir_base = os.path.join(root, dir_name)
     dir_id = 1
     checkpoint_dir = f"{checkpoint_dir_base}_{dir_id}"
@@ -194,10 +241,12 @@ class MSPDTrainer:
       checkpoint_dir = f"{checkpoint_dir_base}_{dir_id}"
     if create:
       os.mkdir(checkpoint_dir)
-    if absolute_path:
-      return checkpoint_dir
+    if id:
+      return (checkpoint_dir, dir_id) if absolute_path \
+               else f"{dir_name}_{dir_id}", dir_id
     else:
-      return f"{dir_name}_{dir_id}"
+      return checkpoint_dir if absolute_path \
+        else f"{dir_name}_{dir_id}"
 
   def _stage_1_noise(self, loaders):
     for i, loader in enumerate(loaders):

@@ -12,19 +12,22 @@ from log import Logger
 
 class Aggregator:
   """
-  FL aggregator
+  FL aggregator. It implements federated averaging.
+    -> https://arxiv.org/pdf/1602.05629.pdf
 
-  :param model_class:
-  :param clients:
-  :param clients_per_round:
-  :param total_training_data_size:
-  :param val_dataloader:
-  :param test_dataloader:
-  :param rounds:
-  :param device:
-  :param logger:
-  :param epsilon:
-  :param max_weight_norm:
+  :param model_class: The type of the global model
+  :param clients: The list of clients
+  :param clients_per_round: The number of clients to be selected each round
+  :param total_training_data_size: The number of training data points of
+            all clients.
+  :param val_dataloader: The global validation data loader.
+  :param test_dataloader: The global test data loader.
+  :param rounds: The number of rounds of training.
+  :param device: The device used to train and test the models on
+  :param logger: The logger
+  :param epsilon: The privacy budget for global DP (Stage 4)
+  :param max_weight_norm: The maximum L2 norm of the weights
+            of the aggregated model.
   """
 
   def __init__(self,
@@ -38,7 +41,7 @@ class Aggregator:
                device: torch.device,
                logger: Optional[Logger] = None,
                epsilon: Optional[float] = None,
-               max_weight_norm: Optional[float] = None):
+               max_weight_norm: Optional[float] = 20):
 
     self.model_class = model_class
     self.model = None
@@ -73,6 +76,7 @@ class Aggregator:
       self.log(f'******** ROUND {r + 1} ********')
 
       if self.dp_stage:
+        # Reset the values, to be properly assigned during aggregation
         self.max_exposures = 0
         self.min_client_dataset = self.total_training_data_size
 
@@ -108,11 +112,13 @@ class Aggregator:
     global_model_contribution_weight = 0  # first, take the whole model
     for client in self.current_round_clients:
       client_params = client.get_model_params()
-      client_contribution_weight = client.training_data_size / self.curr_round_training_dataset_size
+      client_contribution_weight = client.training_data_size / \
+                                   self.curr_round_training_dataset_size
 
       if self.dp_stage:
         self.max_exposures = max(self.max_exposures, client.exposures)
-        self.min_client_dataset = min(self.min_client_dataset, client.training_data_size)
+        self.min_client_dataset = min(self.min_client_dataset,
+                                      client.training_data_size)
 
       global_model_params = self.model.named_parameters()
       dict_global_model_params = dict(global_model_params)
@@ -122,7 +128,8 @@ class Aggregator:
         for name, param in client_params:
           if name in dict_global_model_params:
             averaged_weights = client_contribution_weight * param.data \
-                               + global_model_contribution_weight * dict_global_model_params[name].data
+                               + global_model_contribution_weight \
+                               * dict_global_model_params[name].data
             dict_global_model_params[name].data.copy_(averaged_weights)
 
       # use the whole global model and a contribution fraction from the client's model
@@ -130,10 +137,12 @@ class Aggregator:
 
   def _select_clients(self, current_round):
     np.random.seed(current_round)
-    client_indexes = np.random.choice(range(len(self.clients)), self.clients_per_round, replace=False)
+    client_indices = np.random.choice(range(len(self.clients)),
+                                      self.clients_per_round,
+                                      replace=False)
     self.current_round_clients = []
     current_training_data = 0
-    for ci in client_indexes:
+    for ci in client_indices:
       self.current_round_clients.append(self.clients[ci])
       current_training_data += self.clients[ci].training_data_size
     self.curr_round_training_dataset_size = current_training_data

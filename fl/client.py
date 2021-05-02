@@ -11,25 +11,26 @@ from dp_stages import Stages
 
 class Client:
   """
-  FL client
+  Represents a client used during a FL simulation
 
-  :param id:
-  :param model_class:
-  :param dataloaders:
-  :param epochs:
-  :param batch_size:
-  :param optimizer_class:
-  :param learning_rate:
-  :param weight_decay:
-  :param device:
-  :param optimizer_momentum:
-  :param eps1:
-  :param noise_multiplier:
-  :param max_grad_norm:
-  :param eps3:
-  :param max_weight_norm:
-  :param logger:
-  :param experiment_id:
+  :param id: client id
+  :param model_class: the type of the client model
+  :param dataloaders: the list of data loaders
+  :param epochs: the number of local epochs
+  :param batch_size: the batch size for local training
+  :param optimizer_class: the type of optimizer
+  :param learning_rate: the learning rate of the optimizer
+  :param weight_decay: the weight decay used in optimization
+  :param device: the device used to train/test the model
+  :param optimizer_momentum: Optional. The momentum of the optimizer.
+            used for SGD, for instance.
+  :param eps1: The privacy budget of the first stage
+  :param noise_multiplier: The noise multiplier used in the second stage.
+  :param max_grad_norm: The maximum gradient norm used in the second stage.
+  :param eps3: The privacy budget for the third stage.
+  :param max_weight_norm: The maximum L2 norm of the weights of the model
+  :param logger: the logger
+  :param experiment_id: the experiment id
   """
   def __init__(self,
                id: int,
@@ -95,7 +96,7 @@ class Client:
       self.model_trainer.attach_stage(Stages.STAGE_3, {'eps': eps3,
                                                        'max_weight_norm': max_weight_norm})
 
-    # The number of times the clients took part in the aggregation
+    # The number of times the clients took part in aggregation
     self.exposures = 0
 
   # noinspection PyArgumentList

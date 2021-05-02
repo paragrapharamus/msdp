@@ -1,3 +1,4 @@
+import os
 import sys
 from copy import deepcopy
 from typing import Optional, Tuple, Type, List, Dict, Union
@@ -16,20 +17,43 @@ from log import Logger
 class FLEnvironment:
   """ Federeated Learning simulated Environment
 
-    :param model_class:
-    :param train_dataset:
-    :param test_dataset:
-    :param num_clients:
-    :param aggregator_class:
-    :param rounds:
-    :param device:
-    :param client_optimizer_class:
-    :param partition_method:
-    :param alpha:
-    :param clients_per_round:
-    :param client_local_test_split:
-    :param logger:
-    :param args:
+    :param model_class: The class of the model to be trained.
+
+    :param train_dataset: The training dataset.
+
+    :param test_dataset: The test dataset used to test the global model.
+
+    :param num_clients: The number of clients to take part into training.
+
+    :param aggregator_class: The type of aggregator.
+
+    :param rounds: Number of rounds to run the federated simulation
+
+    :param device: the device on which the models will be trained and tested.
+
+    :param client_optimizer_class: the optimizer type.
+
+    :param partition_method: The partition method used to split the training
+            data for the clients. Could be ;homogeneous' or 'heterogeneous'.
+              * If 'homogeneous', then each client will get a uniformly
+              distributed slice of data (including uniformly distributed
+              class partition).
+              * If 'heterogeneous', then LDA will be used to allocate the data.
+
+    :param alpha: Dirichlet distribution concentration parameter. Controls the
+            data distribution among clients. If alpha=infinity, then the
+            allocation will be uniform, and when alpha=0, the data allocation
+            is non i.i.d. See https://arxiv.org/pdf/1909.06335.pdf
+
+    :param clients_per_round: The number of clients selected each round.
+            If set to 0, the total number of clients will be used.
+
+    :param client_local_test_split: The ratio used for the local test splits.
+            If 'True' then a default value of 0.1 will be used.
+
+    :param logger: The logger
+
+    :param args: additional arguments for clients and trainers
   """
 
   def __init__(self,
@@ -56,10 +80,11 @@ class FLEnvironment:
 
     self.logger = logger
     if logger is None:
-      self.logger = Logger([sys.stdout, './msdp.log'])
+      self.logger = Logger([sys.stdout, f'{args.save_model_path}/msdp.log'])
 
     # Allocate data for each client and ge the global val/test splits
-    training_data_splits, val_dataset = self._split_dataset(train_dataset, partition_method)
+    training_data_splits, val_dataset = self._split_dataset(train_dataset,
+                                                            partition_method)
 
     # Build the global test dataloader
     self.use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -73,8 +98,12 @@ class FLEnvironment:
     test_loader = DataLoader(test_dataset, **test_kwargs)
 
     # Initialize the clients
-    self.clients, n_training_data = self._init_clients(model_class, client_optimizer_class, training_data_splits,
-                                                       client_local_test_split, train_kwargs, test_kwargs)
+    self.clients, n_training_data = self._init_clients(model_class,
+                                                       client_optimizer_class,
+                                                       training_data_splits,
+                                                       client_local_test_split,
+                                                       train_kwargs,
+                                                       test_kwargs)
     clients_per_round = clients_per_round if clients_per_round > 0 else len(self.clients)
 
     # Initialize the aggregator
@@ -92,7 +121,9 @@ class FLEnvironment:
     self.log("FL simulation started...")
     self.aggregator.train_and_test()
     if args.save_model:
-      self.aggregator.save_model(args.save_model_path)
+      self.aggregator.save_model(
+        os.path.join(args.save_model_path, 'final.ckpt')
+      )
 
   def log(self, *msg):
     self.logger.log(*msg, module='FLEnv')
@@ -126,7 +157,8 @@ class FLEnvironment:
 
       # Generate local test splits
       if client_local_test_split:
-        train_dataset, test_dataset = train_test_split(client_dataset, client_local_test_split)
+        train_dataset, test_dataset = train_test_split(client_dataset,
+                                                       client_local_test_split)
         train_loader = DataLoader(train_dataset, **train_kwargs)
         test_loader = DataLoader(test_dataset, **test_kwargs)
         dataloaders = [train_loader, test_loader]
@@ -156,7 +188,10 @@ class FLEnvironment:
       clients.append(client)
     return clients, n_training_data
 
-  def _split_dataset(self, train_dataset: Dataset, partition_method: str) -> Tuple[Dict[int, Dataset], Dataset]:
+  def _split_dataset(self,
+                     train_dataset: Dataset,
+                     partition_method: str
+                     ) -> Tuple[Dict[int, Dataset], Dataset]:
     """
     Fetches and splits the training dataset foe each client
 
@@ -165,10 +200,11 @@ class FLEnvironment:
     :return: * split data for each client id
              * the validation data split
     """
-    train_dataset, val_dataset, allocation, _ = self._allocate_data(train_dataset,
-                                                                    self.num_clients,
-                                                                    partition_method=partition_method,
-                                                                    alpha=self.alpha)
+    (train_dataset, val_dataset,
+     allocation, _) = self._allocate_data(train_dataset,
+                                          self.num_clients,
+                                          partition_method=partition_method,
+                                          alpha=self.alpha)
     splits = {}
     self.log('Building client datasets...')
     for split_id in range(self.num_clients):
@@ -185,15 +221,17 @@ class FLEnvironment:
                      partition_method: Optional[str] = 'heterogeneous',
                      alpha: Optional[float] = 0.5):
     """
-    Allocates the training data into a given number of splits, keeping a validation split
+    Allocates the training data into a given number of splits,
+    keeping a validation split
 
     Based on FedML partition method https://github.com/FedML-AI/FedML
 
     :param train_dataset: the training dataset
     :param partition_method: 'homogeneous' or 'heterogeneous'
     :param num_of_splits: the number of splits in which the data is partitioned
-    :param alpha: Dirichlet distribution concentration parameter. Controls the data distribution
-                  among clients. See https://arxiv.org/pdf/1909.06335.pdf
+    :param alpha: Dirichlet distribution concentration parameter.
+                  Controls the data distribution among clients.
+                  See https://arxiv.org/pdf/1909.06335.pdf
 
     :return: The allocation dictionary dict[split_id, np.ndarray[indices]]
     """
@@ -204,7 +242,8 @@ class FLEnvironment:
     training_dataset_size = len(train_dataset.data)
     num_classes = len(train_dataset.classes)
 
-    self.log(f'Train data size: {training_dataset_size}, Global Val data size: {len(val_dataset.data)}')
+    self.log(f'Train data size: {training_dataset_size}, '
+             f'Global Val data size: {len(val_dataset.data)}')
     self.log(f"Allocating data using {partition_method} splits...")
     if partition_method == "heterogeneous":
       min_size = 0
@@ -220,10 +259,13 @@ class FLEnvironment:
           proportions = np.random.dirichlet(np.repeat(alpha, num_of_splits))
 
           #  Balance
-          proportions = np.array([p * (len(idx_j) < split_size) for p, idx_j in zip(proportions, split_indices)])
+          proportions = np.array([p * (len(idx_j) < split_size)
+                                  for p, idx_j in zip(proportions, split_indices)])
           proportions = proportions / proportions.sum()
           proportions = (np.cumsum(proportions) * len(class_indices)).astype(int)[:-1]
-          split_indices = [idx_j + idx.tolist() for idx_j, idx in zip(split_indices, np.split(class_indices, proportions))]
+          split_indices = [idx_j + idx.tolist()
+                           for idx_j, idx in
+                           zip(split_indices, np.split(class_indices, proportions))]
           min_size = min([len(idx_j) for idx_j in split_indices])
 
       for split_idx in range(num_of_splits):

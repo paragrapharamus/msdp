@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Tuple, Type, Optional, Any
 
 import numpy as np
@@ -89,19 +90,19 @@ def model_extraction(model: pl.LightningModule,
                      max_epochs: int,
                      logger=None
                      ):
-  log('Model extraction has started...', logger)
-  # The victim model
-  model = convert_to_inference(model)
-
   def truncate(ds: Dataset, size: int):
     idxs = np.random.permutation(len(ds.data))[:size]
     ds.data = ds.data[idxs]
     ds.targets = np.array(ds.targets)[idxs]
     return ds
 
+  log('Model extraction has started...', logger)
+  # The victim model
+  model = convert_to_inference(model)
+
   # Obtain seed (or public) data to be used in extraction
-  train_dataset = truncate(train_dataset, query_limit // 2)
-  test_dataset = truncate(test_dataset, query_limit // 2)
+  train_dataset = truncate(deepcopy(train_dataset), query_limit // 2)
+  test_dataset = truncate(deepcopy(test_dataset), query_limit // 2)
   dataset = merge_datasets(train_dataset, test_dataset)
 
   split_ratio = 0.1
@@ -131,8 +132,12 @@ def model_extraction(model: pl.LightningModule,
     trainer_args={'progress_bar_refresh_rate': 0,
                   'weights_summary': None}
   )
+
+  # extraction_rate = _calc_extraction_rate(model, attack.substitute_model)
+
   log(f"Model extraction fidelity: {attack.label_agreement * 100:.2f}", logger)
   # log(attack.__dict__)
+  return attack.label_agreement
 
 
 def membership_inference_black_box(model: pl.LightningModule,
@@ -142,8 +147,8 @@ def membership_inference_black_box(model: pl.LightningModule,
                                    test_dataset: Dataset,
                                    input_shape: Tuple[int, ...],
                                    num_classes: int,
-                                   attack_train_ratio: float,
-                                   attack_test_ratio: float,
+                                   attack_train_size: int,
+                                   attack_test_size: int,
                                    attack_model_type: Optional[str] = 'rf',
                                    attack_model: Optional[Any] = None,
                                    logger=None
@@ -162,21 +167,23 @@ def membership_inference_black_box(model: pl.LightningModule,
                                          attack_model_type=attack_model_type,
                                          attack_model=attack_model
                                          )
+  train_dataset = deepcopy(train_dataset)
+  test_dataset = deepcopy(test_dataset)
 
   x_train, y_train = np.moveaxis(train_dataset.data, -1, 1), np.array(train_dataset.targets)
   x_test, y_test = np.moveaxis(test_dataset.data, -1, 1), np.array(test_dataset.targets)
 
   # Train the attack model
   log('Training the attack model...', logger)
-  attack_train_size = int(len(train_dataset) * attack_train_ratio)
-  attack_test_size = int(len(test_dataset) * attack_test_ratio)
   bb_atack.fit(x_train[:attack_train_size].astype(np.float32), y_train[:attack_train_size],
                x_test[:attack_test_size].astype(np.float32), y_test[:attack_test_size])
 
   # Infer on member and non-member data
   log('Attack the target model model...', logger)
-  train_members = bb_atack.infer(x_train.astype(np.float32), y_train)
-  test_members = bb_atack.infer(x_test.astype(np.float32), y_test)
+  s, e = attack_train_size, min(2 * attack_train_size, len(x_train))
+  train_members = bb_atack.infer(x_train.astype(np.float32)[s:e], y_train[s:e])
+  s, e = attack_test_size, min(2 * attack_test_size, len(x_test))
+  test_members = bb_atack.infer(x_test.astype(np.float32)[s:e], y_test[s:e])
 
   # Check the accuracy of the attack
   train_acc_attack = np.sum(train_members) / len(train_members)
@@ -188,7 +195,7 @@ def membership_inference_black_box(model: pl.LightningModule,
   log(f"MIA accuracy on test data {test_acc_attack}", logger)
 
   p, r = _calc_precision_recall(np.concatenate((train_members, test_members)),
-                                np.concatenate((np.ones(len(train_members)), np.zeros(len(train_members)))))
+                                np.concatenate((np.ones(len(train_members)), np.zeros(len(test_members)))))
 
   log(f"MIA accuracy: {attack_acc:.3f}, precision: {p:.3f}, recall: {r:.3f}", logger)
   return attack_acc, p, r
@@ -322,3 +329,16 @@ def _calc_precision_recall(predicted, actual, positive_value=1):
     recall = score / num_positive_actual  # the fraction of “Yes” responses that are predicted correctly
 
   return precision, recall
+
+
+def _calc_extraction_rate(victim_model, extracted_model):
+  victim_model_params = list(victim_model.parameters())
+  extracted_model_params = list(extracted_model.parameters())
+
+  diffs = []
+  for i in range(len(victim_model_params)):
+    diffs.append(
+      torch.linalg.norm(extracted_model_params[i] - victim_model_params[i]) / torch.linalg.norm(victim_model_params[i]))
+
+  diffs = sum(diffs) / len(diffs)
+  return 1 - min(diffs, 1)
