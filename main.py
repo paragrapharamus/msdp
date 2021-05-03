@@ -84,10 +84,10 @@ def attack_model(args: ExperimentConfig,
                                   loss=nn.CrossEntropyLoss(),
                                   optimizer_class=torch.optim.Adam,
                                   input_shape=train_dataset.input_shape,
-                                  num_classes=10,
+                                  num_classes=train_dataset.num_classes,
                                   test_dataset=test_dataset,
                                   batch_size=args.batch_size,
-                                  epochs=5,
+                                  epochs=25,
                                   query_limit=9000,
                                   logger=logger
                                   )
@@ -97,13 +97,22 @@ def attack_model(args: ExperimentConfig,
 def non_private_training_on_cifar10():
   args = ExperimentConfig()
   args.name = "Non private training on CIFAR10"
+  args.stage1 = False
+  args.stage2 = False
+  args.stage3 = False
+  args.stage4 = False
+  args.batch_size = 128
+  args.epochs = 15
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
   dataloaders = load_dataset('cifar10', args)
   model = Cifar10Net().to(device)
-  optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+  optimizer = torch.optim.SGD(model.parameters(),
+                              lr=args.lr,
+                              momentum=args.momentum,
+                              weight_decay=args.weight_decay)
 
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
@@ -120,16 +129,19 @@ def non_private_training_on_cifar10():
 
 
 @expertiment
-def msdp_training_on_cifar10(stage_1=True, stage_2=False, stage_3=False):
+def msdp_training_on_cifar10():
   args = ExperimentConfig()
-  args.name = f"MSDP on CIFAR10, Stage1={stage_1}, Stage2={stage_2}, Stage3={stage_3}"
+  args.name = f"MSDP on CIFAR10, Stage1={args.stage1}, Stage2={args.stage2}, Stage3={args.stage3}"
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
   dataloaders = load_dataset('cifar10', args)
   model = Cifar10Net().to(device)
-  optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+  optimizer = torch.optim.SGD(model.parameters(),
+                              lr=args.lr,
+                              momentum=args.momentum,
+                              weight_decay=args.weight_decay)
 
   trainer = MSPDTrainer(model=model,
                         optimizer=optimizer,
@@ -142,15 +154,15 @@ def msdp_training_on_cifar10(stage_1=True, stage_2=False, stage_3=False):
 
   trainer.logger.log(args)
 
-  if stage_1:
+  if args.stage1:
     trainer.attach_stage(Stages.STAGE_1,
                          {'eps': args.eps1,
                           'max_grad_norm': args.max_grad_norm})
-  if stage_2:
+  if args.stage2:
     trainer.attach_stage(Stages.STAGE_2,
                          {'noise_multiplier': args.noise_multiplier,
                           'max_grad_norm': args.max_grad_norm})
-  if stage_3:
+  if args.stage3:
     trainer.attach_stage(Stages.STAGE_3,
                          {'eps': args.eps3,
                           'max_weight_norm': args.max_weight_norm})
@@ -164,6 +176,9 @@ def msdp_training_on_cifar10(stage_1=True, stage_2=False, stage_3=False):
 def opacus_training_on_cifar10():
   args = ExperimentConfig()
   args.name = "Opacus training on CIFAR10"
+  args.noise_multiplier = 0.7
+
+  print(args)
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
@@ -208,8 +223,8 @@ def fl_simulation_on_cifar10():
 
 def run_experiments():
   experiments = [
-    # msdp_training_on_cifar10
-    fl_simulation_on_cifar10
+    msdp_training_on_cifar10,
+    # opacus_training_on_cifar10
   ]
 
   for exp in experiments:
@@ -239,12 +254,10 @@ def attack_test():
   device = torch.device("cuda" if use_cuda else "cpu")
 
   args.membership_inference = False
-  args.model_extraction = True
+  args.model_extraction = False
 
-  # attack_model(args, device, 'cifar10', architecture=Cifar10Net,
-  #              checkpoint_path='out/checkpoints_9/checkpoint-epoch=14-valid_acc=0.58.ckpt')
-
-  attack_model(args, device, 'cifar10', architecture=Cifar10Net, model=Cifar10Net())
+  attack_model(args, device, 'cifar10', architecture=Cifar10Net, model=Cifar10Net(),)#
+               # checkpoint_path='out/checkpoints_1/final.ckpt')
 
 
 if __name__ == '__main__':

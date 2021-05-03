@@ -52,7 +52,7 @@ class MSPDTrainer:
     self.checkpoint_dir = None
     if save_checkpoint:
       self.checkpoint_dir = self._get_next_available_dir('out/', 'checkpoints',
-                                                         absolute_path=False)
+                                                         absolute_path=True)
       checkpoint_callback = ModelCheckpoint(
         monitor='valid_acc_epoch',
         dirpath=self.checkpoint_dir,
@@ -107,7 +107,7 @@ class MSPDTrainer:
     if logger is None:
       d = self.checkpoint_dir if self.checkpoint_dir else '.'
       self.logger = Logger([sys.stdout, f'{d}/msdp.log'])
-      self.model.personal_log = self.log
+      self.model.personal_log_fn = self.log
 
   def attach_stage(self, stage_type: Stages, stage_param_dict: dict):
     if stage_type == Stages.STAGE_1:
@@ -116,6 +116,9 @@ class MSPDTrainer:
     elif stage_type == Stages.STAGE_2:
       self.stages[stage_type] = Stage2(stage_param_dict['noise_multiplier'],
                                        stage_param_dict['max_grad_norm'])
+      # When training with Stage 2 attached, allow the model to accumulate
+      # more batches before applying the gradient perturbation
+      self.model.virtual_batches = self.virtual_batches
     elif stage_type == Stages.STAGE_3:
       self.stages[stage_type] = Stage3(stage_param_dict['eps'],
                                        stage_param_dict['max_weight_norm'])
@@ -205,6 +208,7 @@ class MSPDTrainer:
 
   def _save_training_stats(self):
     training_losses = np.array(self.model.training_losses)
+    training_accuracies = np.array(self.model.training_accuracies)
     validation_accuracies = np.array(self.model.validation_accuracies)
 
     file_id = f'{self.id}_plot_stats'
@@ -214,6 +218,7 @@ class MSPDTrainer:
       fp = os.path.join(self.stat_dir, file_id)
 
     np.save(fp, training_losses)
+    np.save(fp, training_accuracies)
     np.save(fp, validation_accuracies)
 
   def _load_training_stats(self):
@@ -224,8 +229,9 @@ class MSPDTrainer:
       fp = os.path.join(os.getcwd(), file_id)
 
     training_losses = np.load(fp)
+    training_accuracies = np.load(fp)
     validation_accuracies = np.load(fp)
-    return training_losses, validation_accuracies
+    return training_losses, training_accuracies, validation_accuracies
 
   @staticmethod
   def _get_next_available_dir(root,

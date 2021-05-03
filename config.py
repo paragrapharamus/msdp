@@ -25,16 +25,21 @@ class ExperimentConfig:
     ##########################
     # MSDP
     ##########################
+    self.stage1 = True
+    self.stage2 = True
+    self.stage3 = True
+    self.stage4 = True
+
     # Stage 1
     self.eps1 = 10
 
     # Stage 2
-    self.noise_multiplier = 0.3
-    self.max_grad_norm = 6
+    self.noise_multiplier = 0.4
+    self.max_grad_norm = 7
     self.virtual_batches = 1
 
     # Stage 3
-    self.eps3 = 1
+    self.eps3 = 0.5
     self.max_weight_norm = 20
 
     # Stage 4

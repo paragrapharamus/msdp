@@ -31,6 +31,7 @@ class Cifar10Net(pl.LightningModule):
     self.personal_log_fn = None
 
     self.training_losses = []
+    self.training_accuracies = []
     self.validation_accuracies = []
 
   @property
@@ -42,13 +43,20 @@ class Cifar10Net(pl.LightningModule):
 
   def training_step(self, batch, batch_idx):
     opt = self.optimizers()
-    opt.zero_grad()
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
     output = self(data)
     loss = self.compute_loss(output, targets)
     self.manual_backward(loss, opt)
-    opt.step()
+    if hasattr(self, 'virtual_batches'):
+      if ((batch_idx + 1) % self.virtual_batches == 0) or ((batch_idx + 1) == len(self.train_dataloader())):
+        opt.step()
+        opt.zero_grad()
+      else:
+        opt.virtual_step()
+    else:
+      opt.step()
+      opt.zero_grad()
     self.log('train_acc', self.train_acc(torch.argmax(output, 1), targets))
     self.log('train_loss', loss, prog_bar=True, on_step=False, on_epoch=True)
     return {'train_loss': loss}
@@ -58,6 +66,7 @@ class Cifar10Net(pl.LightningModule):
     self.log('train_acc_epoch', accuracy)
     epoch_loss = torch.stack([x['train_loss'] for x in outputs]).mean()
     self.training_losses.append(epoch_loss.item())
+    self.training_accuracies.append(accuracy)
     if self.personal_log_fn:
       self.personal_log_fn(f"Train epoch {self.current_epoch} - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
 

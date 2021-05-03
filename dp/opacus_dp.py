@@ -106,6 +106,8 @@ def _train(args, model, train_loader, optimizer, epoch, device):
           f"Acc@1: {np.mean(top1_acc):.6f} "
         )
 
+  return np.array(losses).mean(), np.array(top1_acc).mean()
+
 
 def _test(type, model, test_loader, device):
   model.eval()
@@ -187,9 +189,14 @@ def opacus_training(model, dataloaders, global_args):
   )
   privacy_engine.attach(optimizer)
 
+  training_losses, training_accuracies = [], []
+  validation_accuracies = []
   for epoch in range(args.start_epoch, args.epochs + 1):
-    _train(args, model, train_loader, optimizer, epoch, device)
+    tr_loss, tr_acc = _train(args, model, train_loader, optimizer, epoch, device)
     top1_acc = _test('Validation', model, val_loader, device)
+    training_losses.append(tr_loss)
+    training_accuracies.append(tr_acc)
+    validation_accuracies.append(top1_acc)
 
     # remember best acc@1 and save checkpoint
     is_best = top1_acc > best_acc1
@@ -206,6 +213,11 @@ def opacus_training(model, dataloaders, global_args):
       is_best,
       filename=args.checkpoint_file,
     )
+
+  fp = './opacus_training_stats'
+  np.save(fp, np.array(training_losses))
+  np.save(fp, np.array(training_accuracies))
+  np.save(fp, np.array(validation_accuracies))
 
   top1_acc = _test('Test', model, test_loader, device)
   print(f"Test set accuracy: {top1_acc:.2f}")
