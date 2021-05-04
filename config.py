@@ -10,7 +10,7 @@ class ExperimentConfig:
     ##########################
     self.batch_size = 256
     self.test_batch_size = 1000
-    self.epochs = 75
+    self.epochs = 25
     self.lr = 0.02
     self.gamma = 0.7
     self.weight_decay = 5e-4
@@ -34,12 +34,12 @@ class ExperimentConfig:
     self.eps1 = 10
 
     # Stage 2
-    self.noise_multiplier = 0.35
+    self.noise_multiplier = 0.4
     self.max_grad_norm = 7
     self.virtual_batches = 1
 
     # Stage 3
-    self.eps3 = 3
+    self.eps3 = 2
     self.max_weight_norm = 20
 
     # Stage 4
