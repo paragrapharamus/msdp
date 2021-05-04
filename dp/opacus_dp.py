@@ -168,7 +168,7 @@ def opacus_training(model, dataloaders, global_args):
 
   best_acc1 = 0
   device = torch.device(args.device)
-  # model = convert_batchnorm_modules(models.resnet18(num_classes=10))
+  # model = convert_batchnorm_modules(model)
 
   train_loader, val_loader, test_loader = dataloaders
   model = model.to(device)

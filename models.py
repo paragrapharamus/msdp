@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+from opacus.utils.module_modification import convert_batchnorm_modules
 from torchvision.models import resnet18
 
 
@@ -24,7 +25,7 @@ class Cifar10Net(pl.LightningModule):
     #   # nn.LogSoftmax(dim=1)
     # )
 
-    self.classifier = resnet18(num_classes=NUM_CLASSES)
+    self.classifier = convert_batchnorm_modules(resnet18(num_classes=NUM_CLASSES))
 
     self.train_acc = pl.metrics.Accuracy()
     self.valid_acc = pl.metrics.Accuracy()
