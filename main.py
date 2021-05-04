@@ -179,7 +179,7 @@ def msdp_training_on_cifar10():
 def opacus_training_on_cifar10():
   args = ExperimentConfig()
   args.name = "Opacus training on CIFAR10"
-  args.noise_multiplier = 0.7
+  args.noise_multiplier = 0.5
 
   print(args)
 
@@ -226,9 +226,8 @@ def fl_simulation_on_cifar10():
 
 def run_experiments():
   experiments = [
-    non_private_training_on_cifar10,
     msdp_training_on_cifar10,
-    opacus_training_on_cifar10
+    # opacus_training_on_cifar10
   ]
 
   for exp in experiments:
