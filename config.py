@@ -10,7 +10,7 @@ class ExperimentConfig:
     ##########################
     self.batch_size = 256
     self.test_batch_size = 1000
-    self.epochs = 25
+    self.epochs = 75
     self.lr = 0.02
     self.gamma = 0.7
     self.weight_decay = 5e-4
