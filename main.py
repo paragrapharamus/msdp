@@ -48,6 +48,7 @@ def attack_model(args: ExperimentConfig,
   train_dataset, _, test_dataset = get_dataset(dataset_name)
 
   if args.membership_inference:
+    _set_seed()
     membership_inference_black_box(model=model,
                                    loss=nn.CrossEntropyLoss(),
                                    optimizer_class=torch.optim.Adam,
@@ -60,6 +61,7 @@ def attack_model(args: ExperimentConfig,
                                    logger=logger
                                    )
   if args.model_extraction:
+    _set_seed()
     fidelity = 0
     runs = 3
     for _ in range(runs):
@@ -79,6 +81,7 @@ def attack_model(args: ExperimentConfig,
     logger.log(msg) if logger else print(msg)
 
   if args.knockoffnet_extraction:
+    _set_seed()
     model_extraction_knockoffnets(model=model,
                                   attack_model_cls=architecture,
                                   loss=nn.CrossEntropyLoss(),
@@ -223,8 +226,9 @@ def fl_simulation_on_cifar10():
 
 def run_experiments():
   experiments = [
+    non_private_training_on_cifar10,
     msdp_training_on_cifar10,
-    # opacus_training_on_cifar10
+    opacus_training_on_cifar10
   ]
 
   for exp in experiments:
