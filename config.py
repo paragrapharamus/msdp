@@ -39,7 +39,7 @@ class ExperimentConfig:
     self.virtual_batches = 1
 
     # Stage 3
-    self.eps3 = 1
+    self.eps3 = 3
     self.max_weight_norm = 20
 
     # Stage 4
