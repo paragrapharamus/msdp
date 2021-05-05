@@ -1,11 +1,12 @@
-import json
 from typing import Type
 
 import os
 import warnings
 
+import numpy as np
 import pytorch_lightning as pl
 from torch import nn
+from matplotlib import pyplot as plt
 
 from attacks import model_extraction, membership_inference_black_box, model_extraction_knockoffnets
 from config import ExperimentConfig
@@ -227,7 +228,7 @@ def fl_simulation_on_cifar10():
 def run_experiments():
   experiments = [
     msdp_training_on_cifar10,
-    # opacus_training_on_cifar10
+    opacus_training_on_cifar10
   ]
 
   for exp in experiments:
@@ -259,11 +260,51 @@ def attack_test():
   args.membership_inference = False
   args.model_extraction = False
 
-  attack_model(args, device, 'cifar10', architecture=Cifar10Net, model=Cifar10Net(),)#
-               # checkpoint_path='out/checkpoints_1/final.ckpt')
+  attack_model(args, device, 'cifar10', architecture=Cifar10Net, model=Cifar10Net(), )  #
+  # checkpoint_path='out/checkpoints_1/final.ckpt')
+
+
+def _plot(data_dict, y_label):
+  fig, ax = plt.subplots()  # (figsize=(10,10))
+
+  for name, data in data_dict.items():
+    ax.plot(data, label=name)
+
+  ax.legend()
+  plt.xlabel('Epoch')
+  plt.ylabel(y_label)
+  plt.show()
+
+
+def load_and_plot():
+  def fetch(fs, metric_name):
+    metric_data = dict()
+    for f in fs:
+      metric_data[f['name']] = f[metric_name]
+    return metric_data
+
+  metrics = ['train_loss', 'train_acc', 'val_acc']
+
+  msdp = {'name': 'MSDP', 'fp': "out/checkpoints_6/MSDPTrainer_0_plot_stats.npy"}
+  opacus = {'name': 'Opacus', 'fp': "out/opacus_training_2/opacus_training_stats.npy"}
+  non_private = {'name': 'Non-Private', 'fp': "out/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
+
+  files = [msdp, opacus, non_private]
+
+  for f in files:
+    data = dict()
+    fp = f['fp']
+    for metric in metrics:
+      data[metric] = np.load(fp)
+    f.update(**data)
+
+  for metric in metrics:
+    metric_data = fetch(files, metric)
+    _plot(metric_data, metric)
 
 
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
+  # load_and_plot()
   run_experiments()
   # attack_test()

@@ -211,15 +211,16 @@ class MSPDTrainer:
     training_accuracies = np.array(self.model.training_accuracies)
     validation_accuracies = np.array(self.model.validation_accuracies)
 
-    file_id = f'{self.id}_plot_stats'
+    file_id = f'{self.id}_plot_stats.npy'
     if self.checkpoint_dir:
       fp = os.path.join(self.checkpoint_dir, file_id)
     else:
       fp = os.path.join(self.stat_dir, file_id)
 
-    np.save(fp, training_losses)
-    np.save(fp, training_accuracies)
-    np.save(fp, validation_accuracies)
+    with open(fp, 'wb') as f:
+      np.save(f, training_losses)
+      np.save(f, training_accuracies)
+      np.save(f, validation_accuracies)
 
   def _load_training_stats(self):
     file_id = f'{self.id}_plot_stats'
@@ -228,9 +229,10 @@ class MSPDTrainer:
     else:
       fp = os.path.join(os.getcwd(), file_id)
 
-    training_losses = np.load(fp)
-    training_accuracies = np.load(fp)
-    validation_accuracies = np.load(fp)
+    with open(fp, 'rb') as f:
+      training_losses = np.load(f)
+      training_accuracies = np.load(f)
+      validation_accuracies = np.load(f)
     return training_losses, training_accuracies, validation_accuracies
 
   @staticmethod

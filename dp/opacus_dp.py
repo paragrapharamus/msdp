@@ -214,10 +214,11 @@ def opacus_training(model, dataloaders, global_args):
       filename=args.checkpoint_file,
     )
 
-  fp = './opacus_training_stats'
-  np.save(fp, np.array(training_losses))
-  np.save(fp, np.array(training_accuracies))
-  np.save(fp, np.array(validation_accuracies))
+  fp = './opacus_training_stats.npy'
+  with open(fp, 'wb') as f:
+    np.save(f, np.array(training_losses))
+    np.save(f, np.array(training_accuracies))
+    np.save(f, np.array(validation_accuracies))
 
   top1_acc = _test('Test', model, test_loader, device)
   print(f"Test set accuracy: {top1_acc:.2f}")
