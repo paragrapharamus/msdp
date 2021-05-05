@@ -85,6 +85,7 @@ class Cifar10Net(pl.LightningModule):
   def validation_epoch_end(self, outputs):
     accuracy = self.valid_acc.compute()
     self.log('valid_acc_epoch', accuracy)
+    self.validation_accuracies.append(accuracy)
     if self.personal_log_fn:
       epoch_loss = torch.stack([x['valid_loss'] for x in outputs]).mean()
       self.personal_log_fn(f"Validation epoch {self.current_epoch} - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
