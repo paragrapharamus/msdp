@@ -1,11 +1,9 @@
-import types
 from enum import Enum
 from typing import Union, List, Optional
 
 import numpy as np
 import torch
-from opacus import PerSampleGradientClipper, PrivacyEngine
-from opacus.utils import clipping
+from opacus import PrivacyEngine
 from torch import nn
 from torch.utils.data import DataLoader
 
@@ -119,12 +117,12 @@ class Stage1(DPStage):
       self.max_grad_norm = np.array(max_grad_norm).mean()
 
   def apply(self, data_loader: DataLoader, epochs: Optional[int] = 1) -> DataLoader:
-    dataset = torch.tensor(np.moveaxis(data_loader.dataset.data, -1, 1)).float()
+    dataset = torch.tensor(data_loader.dataset.data).float()
 
     noised_data = self._perturb_dataset(dataset, epochs) if self.max_grad_norm \
       else self._perturb_dataset_with_sensitivity(dataset)
 
-    dataset = np.moveaxis(noised_data.numpy(), 1, -1)
+    dataset = noised_data.numpy()
     dataset = (dataset - dataset.min()) / (dataset.max() - dataset.min()) * 255
     data_loader.dataset.data = dataset.astype(np.uint8)
     data_loader.stage_1_attached = True
@@ -136,7 +134,7 @@ class Stage1(DPStage):
     """
     n = len(dataset)
     delta = 1 / (2 * len(dataset))
-    std = self.max_grad_norm * np.sqrt(epochs * np.log(1/delta) / n * (n - 1)) / self.eps
+    std = self.max_grad_norm * np.sqrt(epochs * np.log(1 / delta) / n * (n - 1)) / self.eps
     self.log(f"Input perturbation: std={std:.2e}, ({self.eps}, {delta})-DP")
     noise = torch.normal(0, std, size=dataset.shape)
     dataset += noise
@@ -225,6 +223,7 @@ class Stage2(DPStage):
     delta = 1 / (1.5 * train_dataset_size)
     return self.privacy_engine.get_privacy_spent(delta)[0], delta
 
+
 class Stage3(DPStage):
   """
     Output (weights) Perturbation.
@@ -272,8 +271,11 @@ class Stage3(DPStage):
       # Calibrate the noise
       max_sensitivity = 2 * clip_val / training_dataset_size
       sensitivity_calibrated_std = max_sensitivity * std
-      # Inject noise to the weights
-      noise = torch.normal(mean=0, std=sensitivity_calibrated_std, size=p.shape).to(p.data.device)
+      # Inject noise into the weights
+      noise = torch.normal(mean=0,
+                           std=sensitivity_calibrated_std,
+                           size=p.shape
+                           ).to(p.data.device)
       p.data.add_(noise)
     return model
 
@@ -312,13 +314,15 @@ class Stage4(DPStage):
     Based on -> https://arxiv.org/abs/1911.00222 for the donwlink channel
     """
     cs = clients / selected_clients
-    b = -(rounds / self.eps) * np.log(1 - cs + cs * np.exp(-self.eps / rounds))
-    g = - np.log(1 - 1 / cs + np.exp(-self.eps / (max_exposure * np.sqrt(selected_clients))) / cs)
-    if rounds <= self.eps / g:
+    alpha = -(rounds / self.eps) * np.log(1 - cs + cs * np.exp(-self.eps / rounds))
+    beta = - np.log(1 - 1 / cs +
+                 np.exp(-self.eps / (max_exposure * np.sqrt(selected_clients))) / cs)
+    if rounds <= self.eps / beta:
       return 0
     else:
       c = np.sqrt(2 * np.log(1.25 / delta))
-      nom = 2 * c * self.max_weight_norm * np.sqrt((rounds ** 2) / (b ** 2) - selected_clients * max_exposure ** 2)
+      nom = 2 * c * self.max_weight_norm * \
+            np.sqrt((rounds ** 2) / (alpha ** 2) - selected_clients * max_exposure ** 2)
       return nom / (min_client_dataset_size * selected_clients * self.eps)
 
   def apply(self,
@@ -330,9 +334,10 @@ class Stage4(DPStage):
             max_exposure: int,
             training_dataset_size: int
             ) -> nn.Module:
-    self.log("Aggregated weights perturbation...")
     delta = 1 / (1.5 * training_dataset_size)
-    std = self._get_std(rounds, clients, selected_clients, min_client_dataset_size, max_exposure, delta)
+    std = self._get_std(rounds, clients, selected_clients,
+                        min_client_dataset_size, max_exposure, delta)
+    self.log(f"Stage IV perturbation: ({self.eps:.2f}, {delta:.2e})-DP with std={std:.2e}")
 
     # Sanitize the model's parameters to ensure privacy
     for i, p in enumerate(model.parameters()):

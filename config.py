@@ -35,11 +35,11 @@ class ExperimentConfig:
 
     # Stage 2
     self.noise_multiplier = 0.3
-    self.max_grad_norm = 7
+    self.max_grad_norm = 5
     self.virtual_batches = 1
 
     # Stage 3
-    self.eps3 = 2
+    self.eps3 = 1
     self.max_weight_norm = 20
 
     # Stage 4

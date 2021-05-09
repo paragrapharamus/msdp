@@ -92,6 +92,9 @@ class Aggregator:
                             self.min_client_dataset, self.max_exposures,
                             self.curr_round_training_dataset_size)
 
+        self.log("Post DP validation results... ")
+        self.test(self.val_dataloader)
+
   def test(self, loader):
     self.model.to(self.device)
     results = self.trainer.test(self.model, loader)

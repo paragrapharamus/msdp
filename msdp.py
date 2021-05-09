@@ -143,6 +143,7 @@ class MSPDTrainer:
                               callbacks=self.trainer_callbacks,
                               progress_bar_refresh_rate=0,
                               accumulate_grad_batches=self.virtual_batches,
+                              num_sanity_val_steps=0,
                               deterministic=True)
 
     self.model.to(self.device)

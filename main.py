@@ -16,7 +16,7 @@ from dp_stages import Stages
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
 from log import Logger
-from models import Cifar10Net
+from models import Cifar10Net, MnistCNNNet, MnistFCNet
 from msdp import MSPDTrainer
 
 
@@ -105,8 +105,8 @@ def non_private_training_on_cifar10():
   args.stage2 = False
   args.stage3 = False
   args.stage4 = False
-  args.batch_size = 128
-  args.epochs = 15
+  args.batch_size = 64
+  args.epochs = 25
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
@@ -136,6 +136,19 @@ def non_private_training_on_cifar10():
 def msdp_training_on_cifar10():
   args = ExperimentConfig()
   args.name = f"MSDP on CIFAR10, Stage1={args.stage1}, Stage2={args.stage2}, Stage3={args.stage3}"
+  args.eps1 = 10
+  args.noise_multiplier = 0.3
+  args.max_grad_norm = 5
+  args.virtual_batches = 1
+  args.eps3 = 1
+  args.max_weight_norm = 20
+  args.batch_size = 256
+  args.test_batch_size = 1000
+  args.epochs = 25
+  args.lr = 0.02
+  args.gamma = 0.7
+  args.weight_decay = 5e-4
+  args.momentum = 0.9
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
@@ -180,7 +193,17 @@ def msdp_training_on_cifar10():
 def opacus_training_on_cifar10():
   args = ExperimentConfig()
   args.name = "Opacus training on CIFAR10"
+  args.batch_size = 256
+  args.epochs = 25
   args.noise_multiplier = 0.5
+  args.max_grad_norm = 6
+  args.lr = 0.02
+  args.gamma = 0.7
+  args.weight_decay = 5e-4
+  args.momentum = 0.9
+  args.stage1 = False
+  args.stage2 = False  # using the opacus library here
+  args.stage3 = False
 
   print(args)
 
@@ -225,10 +248,167 @@ def fl_simulation_on_cifar10():
   attack_model(args, device, 'cifar10', Cifar10Net, model, logger=fl_simulator.logger)
 
 
+@expertiment
+def non_private_training_on_mnist():
+  args = ExperimentConfig()
+  args.name = "Non private training on MNIST"
+  args.stage1 = False
+  args.stage2 = False
+  args.stage3 = False
+  args.stage4 = False
+  args.batch_size = 64
+  args.epochs = 10
+  model_cls = MnistFCNet
+
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
+
+  dataloaders = load_dataset('mnist', args)
+
+  model = model_cls().to(device)
+  optimizer = torch.optim.SGD(model.parameters(),
+                              lr=args.lr,
+                              momentum=args.momentum,
+                              weight_decay=args.weight_decay)
+
+  trainer = MSPDTrainer(model=model,
+                        optimizer=optimizer,
+                        data_loaders=dataloaders,
+                        epochs=args.epochs,
+                        batch_size=args.batch_size,
+                        device=device,
+                        save_checkpoint=True
+                        )
+  trainer.logger.log(args)
+
+  model = trainer.train_and_test()
+  attack_model(args, device, 'mnist', model_cls, model, logger=trainer.logger)
+
+
+@expertiment
+def msdp_training_on_mnist():
+  args = ExperimentConfig()
+  args.name = f"MSDP on MNIST, Stage1={args.stage1}, Stage2={args.stage2}, Stage3={args.stage3}"
+  args.eps1 = 25
+  args.noise_multiplier = 0.6
+  args.max_grad_norm = 6
+  args.virtual_batches = 1
+  args.eps3 = 2
+  args.max_weight_norm = 20
+  args.batch_size = 256
+  args.test_batch_size = 1000
+  args.epochs = 15
+  args.lr = 0.02
+  args.gamma = 0.7
+  args.weight_decay = 5e-4
+  args.momentum = 0.9
+  model_cls = MnistFCNet
+
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
+
+  dataloaders = load_dataset('mnist', args)
+  model = model_cls().to(device)
+  optimizer = torch.optim.SGD(model.parameters(),
+                              lr=args.lr,
+                              momentum=args.momentum,
+                              weight_decay=args.weight_decay)
+
+  trainer = MSPDTrainer(model=model,
+                        optimizer=optimizer,
+                        data_loaders=dataloaders,
+                        epochs=args.epochs,
+                        batch_size=args.batch_size,
+                        device=device,
+                        save_checkpoint=True
+                        )
+
+  trainer.logger.log(args)
+
+  if args.stage1:
+    trainer.attach_stage(Stages.STAGE_1,
+                         {'eps': args.eps1,
+                          'max_grad_norm': args.max_grad_norm})
+  if args.stage2:
+    trainer.attach_stage(Stages.STAGE_2,
+                         {'noise_multiplier': args.noise_multiplier,
+                          'max_grad_norm': args.max_grad_norm})
+  if args.stage3:
+    trainer.attach_stage(Stages.STAGE_3,
+                         {'eps': args.eps3,
+                          'max_weight_norm': args.max_weight_norm})
+
+  model = trainer.train_and_test()
+
+  attack_model(args, device, 'mnist', model_cls, model, logger=trainer.logger)
+
+
+@expertiment
+def opacus_training_on_mnist():
+  args = ExperimentConfig()
+  args.name = "Opacus training on MNIST"
+  args.batch_size = 256
+  args.epochs = 15
+  args.noise_multiplier = 0.8
+  args.max_grad_norm = 6
+  args.lr = 0.02
+  args.gamma = 0.7
+  args.weight_decay = 5e-4
+  args.momentum = 0.9
+  args.stage1 = False
+  args.stage2 = False  # using the opacus library here
+  args.stage3 = False
+  model_cls = MnistFCNet
+
+  print(args)
+
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
+
+  dataloaders = load_dataset('mnist', args)
+  model = model_cls().to(device)
+  model = opacus_training(model, dataloaders, args)
+
+  attack_model(args, device, 'mnist', model_cls, model)
+
+
+@expertiment
+def fl_simulation_on_mnist():
+  args = ExperimentConfig()
+  args.name = "FL Simulation on MNIST"
+  model_cls = MnistCNNNet
+
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
+
+  train_dataset, test_dataset = get_dataset('mnist', False)
+  args.experiment_id = _get_next_available_dir('out/lightning_logs', 'experiment', False, False)
+
+  args.save_model_path = _get_next_available_dir('out/', 'checkpoints', True, True)
+  fl_simulator = FLEnvironment(model_class=model_cls,
+                               train_dataset=train_dataset,
+                               test_dataset=test_dataset,
+                               num_clients=args.num_clients,
+                               aggregator_class=Aggregator,
+                               rounds=args.num_rounds,
+                               device=device,
+                               client_optimizer_class=torch.optim.SGD,
+                               clients_per_round=args.clients_per_round,
+                               client_local_test_split=args.client_local_test_split,
+                               partition_method=args.partition_method,
+                               alpha=args.alpha,
+                               args=args)
+
+  model = fl_simulator.get_model()
+
+  attack_model(args, device, 'mnist', model_cls, model, logger=fl_simulator.logger)
+
+
 def run_experiments():
   experiments = [
-    msdp_training_on_cifar10,
-    opacus_training_on_cifar10
+    # non_private_training_on_mnist,
+    msdp_training_on_mnist,
+    # opacus_training_on_mnist,
   ]
 
   for exp in experiments:
@@ -253,18 +433,20 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
 def attack_test():
   _set_seed()
   args = ExperimentConfig()
+  model_cls = MnistCNNNet
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
   args.membership_inference = False
-  args.model_extraction = False
+  args.model_extraction = True
+  # args.knockoffnet_extraction = True
 
-  attack_model(args, device, 'cifar10', architecture=Cifar10Net, model=Cifar10Net(), )  #
-  # checkpoint_path='out/checkpoints_1/final.ckpt')
+  attack_model(args, device, 'mnist', architecture=model_cls,  # model=model_cls(), )  #
+               checkpoint_path='out/opacus_training/opacus_model.pth')
 
 
-def _plot(data_dict, y_label):
+def _plot(data_dict, y_label, title):
   fig, ax = plt.subplots()  # (figsize=(10,10))
 
   for name, data in data_dict.items():
@@ -273,6 +455,7 @@ def _plot(data_dict, y_label):
   ax.legend()
   plt.xlabel('Epoch')
   plt.ylabel(y_label)
+  plt.title(title)
   plt.show()
 
 
@@ -285,26 +468,34 @@ def load_and_plot():
 
   metrics = ['train_loss', 'train_acc', 'val_acc']
 
-  msdp = {'name': 'MSDP', 'fp': "out/checkpoints_6/MSDPTrainer_0_plot_stats.npy"}
-  opacus = {'name': 'Opacus', 'fp': "out/opacus_training_2/opacus_training_stats.npy"}
-  non_private = {'name': 'Non-Private', 'fp': "out/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
+  msdp = {'name': 'MSDP', 'fp': "out/MNIST/fc/checkpoints_6/MSDPTrainer_0_plot_stats.npy"}
+  opacus = {'name': 'Opacus', 'fp': "out/MNIST/fc/opacus_training/opacus_training_stats.npy"}
+  non_private = {'name': 'Non-Private', 'fp': "out/MNIST/fc/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
+  title = 'MLP on MNIST'
+
+  # msdp = {'name': 'MSDP', 'fp': "out/0_slurm_1/checkpoints_2/MSDPTrainer_0_plot_stats.npy"}
+  # non_private = {'name': 'Non-Private', 'fp': "out/0_slurm_1/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
+  # opacus = {'name': 'Opacus', 'fp': "out/0_slurm_1/opacus_training/opacus_training_stats.npy"}
+  # title = 'ResNet-18 on CIFAR10'
 
   files = [msdp, opacus, non_private]
 
-  for f in files:
+  for data_file in files:
     data = dict()
-    fp = f['fp']
-    for metric in metrics:
-      data[metric] = np.load(fp)
-    f.update(**data)
+    with open(data_file['fp'], 'rb') as f:
+      for metric in metrics:
+        data[metric] = np.load(f)
+        if metric in ['train_acc', 'val_acc'] and data_file['name'] != 'Opacus':
+          data[metric] = data[metric][1:]
+    data_file.update(**data)
 
   for metric in metrics:
     metric_data = fetch(files, metric)
-    _plot(metric_data, metric)
+    _plot(metric_data, metric, title)
 
 
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
-  # load_and_plot()
-  run_experiments()
+  load_and_plot()
+  # run_experiments()
   # attack_test()

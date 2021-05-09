@@ -1,8 +1,9 @@
 from copy import deepcopy
-from typing import Optional, Union
+from typing import Optional, Union, Tuple, Any
 
 import numpy as np
 import torch
+from PIL import Image
 from torch.utils.data import DataLoader, sampler, Dataset
 from torchvision import datasets
 from torchvision import transforms
@@ -18,6 +19,73 @@ class Cifar10Dataset(datasets.CIFAR10):
 
   input_shape = (1, 3, 32, 32)
   num_classes = 10
+  name = 'cifar10'
+
+  def __init__(self, *args, **kwargs) -> None:
+    super(Cifar10Dataset, self).__init__(*args, **kwargs)
+
+    self.data = np.moveaxis(self.data.data, -1, 1)
+    self.targets = np.array(self.targets)
+
+  def __getitem__(self, index: int) -> Tuple[Any, Any]:
+    """
+    Args:
+        index (int): Index
+
+    Returns:
+        tuple: (image, target) where target is index of the target class.
+    """
+    img, target = self.data[index], self.targets[index]
+
+    img = np.moveaxis(img, 0, -1)
+
+    # doing this so that it is consistent with all other datasets
+    # to return a PIL Image
+    img = Image.fromarray(img)
+
+    if self.transform is not None:
+      img = self.transform(img)
+
+    if self.target_transform is not None:
+      target = self.target_transform(target)
+
+    return img, target
+
+
+class MNISTDataset(datasets.MNIST):
+  transform_trainval = transforms.Compose([transforms.ToTensor(),
+                                           transforms.Normalize((0.1307,), (0.3081,))])
+  transform_test = transform_trainval
+  input_shape = (1, 1, 28, 28)
+  num_classes = 10
+  name = 'mnist'
+
+  def __init__(self, *args, **kwargs) -> None:
+    super(MNISTDataset, self).__init__(*args, **kwargs)
+    self.data = self.data.numpy()
+    self.targets = self.targets.numpy()
+
+  def __getitem__(self, index: int) -> Tuple[Any, Any]:
+    """
+    Args:
+        index (int): Index
+
+    Returns:
+        tuple: (image, target) where target is index of the target class.
+    """
+    img, target = self.data[index], int(self.targets[index])
+
+    # doing this so that it is consistent with all other datasets
+    # to return a PIL Image
+    img = Image.fromarray(img, mode='L')
+
+    if self.transform is not None:
+      img = self.transform(img)
+
+    if self.target_transform is not None:
+      target = self.target_transform(target)
+
+    return img, target
 
 
 def load_dataset(dataset_name, args):
@@ -33,27 +101,57 @@ def load_dataset(dataset_name, args):
     print('CPU')
 
   if dataset_name == 'cifar10':
-    return load_cifar10(test_kwargs, train_kwargs)
+    return load_cifar10(train_kwargs, test_kwargs)
+  elif dataset_name == 'mnist':
+    return load_mnist(train_kwargs, test_kwargs)
   else:
     raise NotImplementedError('Unsupported dataset')
+
+
+def _load(train_dataset, valid_dataset, test_dataset, train_kwargs, test_kwargs):
+  # Define the data loaders
+  valid_kwargs = test_kwargs.copy()
+  train_loader = DataLoader(train_dataset, **train_kwargs)
+  valid_loader = DataLoader(valid_dataset, **valid_kwargs)
+  test_loader = DataLoader(test_dataset, **test_kwargs)
+  return train_loader, valid_loader, test_loader
+
+
+def load_cifar10(train_kwargs, test_kwargs):
+  train_dataset, valid_dataset, test_dataset = get_cifar10_dataset(validation_dataset=True)
+  return _load(train_dataset, valid_dataset, test_dataset, train_kwargs, test_kwargs)
+
+
+def load_mnist(train_kwargs, test_kwargs):
+  train_dataset, valid_dataset, test_dataset = get_mnist_dataset(validation_dataset=True)
+  return _load(train_dataset, valid_dataset, test_dataset, train_kwargs, test_kwargs)
 
 
 def get_dataset(dataset_name, validation_dataset=True):
   if dataset_name == 'cifar10':
     return get_cifar10_dataset(validation_dataset=validation_dataset)
+  elif dataset_name == 'mnist':
+    return get_mnist_dataset(validation_dataset=validation_dataset)
   else:
     raise NotImplementedError('Unsupported dataset')
 
 
-def get_cifar10_dataset(validation_dataset=True):
-  train_dataset = Cifar10Dataset("../data", train=True, download=True, transform=Cifar10Dataset.transform_trainval)
-  test_dataset = Cifar10Dataset("../data", train=False, transform=Cifar10Dataset.transform_test)
-
+def _get_dataset(dataset_class, validation_dataset=True):
+  train_dataset = dataset_class("../data", train=True, download=True, transform=dataset_class.transform_trainval)
+  test_dataset = dataset_class("../data", train=False, transform=dataset_class.transform_test)
   if validation_dataset:
     train_dataset, valid_dataset = train_test_split(train_dataset, shuffle=True)
     return train_dataset, valid_dataset, test_dataset
   else:
     return train_dataset, test_dataset
+
+
+def get_cifar10_dataset(validation_dataset=True):
+  return _get_dataset(Cifar10Dataset, validation_dataset)
+
+
+def get_mnist_dataset(validation_dataset=True):
+  return _get_dataset(MNISTDataset, validation_dataset)
 
 
 def truncate_dataset(ds: Dataset, idxs: np.ndarray):
@@ -110,16 +208,6 @@ def train_test_split(dataset: Dataset,
   train_indices = np.array(range(split_index, dataset_size))
   train_dataset = truncate_dataset(dataset, train_indices)
   return train_dataset, test_dataset
-
-
-def load_cifar10(test_kwargs, train_kwargs):
-  train_dataset, valid_dataset, test_dataset = get_cifar10_dataset(validation_dataset=True)
-  # Define the data loaders
-  valid_kwargs = test_kwargs.copy()
-  train_loader = DataLoader(train_dataset, **train_kwargs)
-  valid_loader = DataLoader(valid_dataset, **valid_kwargs)
-  test_loader = DataLoader(test_dataset, **test_kwargs)
-  return train_loader, valid_loader, test_loader
 
 
 def build_truncated_dataset(dataset_name: str,

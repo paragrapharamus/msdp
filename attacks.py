@@ -40,6 +40,7 @@ def model_extraction_knockoffnets(model: pl.LightningModule,
                                   logger=None
                                   ):
   log("KnockOffNets Model extraction attack has started...", logger)
+  _original_input_shape = input_shape
   if len(input_shape) == 4:
     input_shape = input_shape[1:]
 
@@ -55,8 +56,13 @@ def model_extraction_knockoffnets(model: pl.LightningModule,
                         nb_stolen=query_limit
                         )
 
+  test_dataset = deepcopy(test_dataset)
+  X_test, y_test = test_dataset.data, test_dataset.targets
+
+  if _original_input_shape[1] == 1 and len(X_test.shape) < len(_original_input_shape):
+    X_test = np.expand_dims(X_test, axis=1)
+
   indices = np.random.permutation(len(test_dataset))
-  X_test, y_test = np.moveaxis(test_dataset.data, -1, 1), np.array(test_dataset.targets)
   X_steal = X_test[indices[:query_limit]].astype(np.float32)
   y_steal = y_test[indices[:query_limit]].astype(np.float32)
   X_test = X_test[indices[query_limit:]].astype(np.float32)
@@ -93,7 +99,9 @@ def model_extraction(model: pl.LightningModule,
   def truncate(ds: Dataset, size: int):
     idxs = np.random.permutation(len(ds.data))[:size]
     ds.data = ds.data[idxs]
-    ds.targets = np.array(ds.targets)[idxs]
+    if not isinstance(ds.targets, np.ndarray):
+      ds.targets = np.array(ds.targets)
+    ds.targets = ds.targets[idxs]
     return ds
 
   log('Model extraction has started...', logger)
@@ -154,6 +162,7 @@ def membership_inference_black_box(model: pl.LightningModule,
                                    logger=None
                                    ):
   log('Membership Inference attack...', logger)
+  _original_input_shape = input_shape
   if len(input_shape) == 4:
     input_shape = input_shape[1:]
 
@@ -170,8 +179,12 @@ def membership_inference_black_box(model: pl.LightningModule,
   train_dataset = deepcopy(train_dataset)
   test_dataset = deepcopy(test_dataset)
 
-  x_train, y_train = np.moveaxis(train_dataset.data, -1, 1), np.array(train_dataset.targets)
-  x_test, y_test = np.moveaxis(test_dataset.data, -1, 1), np.array(test_dataset.targets)
+  x_train, y_train = train_dataset.data, train_dataset.targets
+  x_test, y_test = test_dataset.data, test_dataset.targets
+
+  if _original_input_shape[1] == 1 and len(x_train.shape) < len(_original_input_shape):
+    x_train = np.expand_dims(x_train, axis=1)
+    x_test = np.expand_dims(x_test, axis=1)
 
   # Train the attack model
   log('Training the attack model...', logger)

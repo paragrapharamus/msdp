@@ -6,26 +6,11 @@ from opacus.utils.module_modification import convert_batchnorm_modules
 from torchvision.models import resnet18
 
 
-class Cifar10Net(pl.LightningModule):
+class MSDPBase(pl.LightningModule):
   def __init__(self, *args):
-    super(Cifar10Net, self).__init__()
+    super(MSDPBase, self).__init__()
 
-    NUM_CLASSES = 10
-    # self.classifier = nn.Sequential(
-    #   nn.Conv2d(3, 32, kernel_size=3, padding=1),
-    #   nn.ReLU(True),
-    #   nn.MaxPool2d(2),
-    #   nn.Conv2d(32, 64, kernel_size=3, padding=1),
-    #   nn.ReLU(True),
-    #   nn.MaxPool2d(2),
-    #   nn.Conv2d(64, 128, kernel_size=3, padding=1),
-    #   nn.ReLU(True),
-    #   nn.MaxPool2d(2),
-    #   nn.Conv2d(128, NUM_CLASSES, kernel_size=4),
-    #   # nn.LogSoftmax(dim=1)
-    # )
-
-    self.classifier = convert_batchnorm_modules(resnet18(num_classes=NUM_CLASSES))
+    self.module = None
 
     self.train_acc = pl.metrics.Accuracy()
     self.valid_acc = pl.metrics.Accuracy()
@@ -42,7 +27,7 @@ class Cifar10Net(pl.LightningModule):
     return False
 
   def forward(self, x):
-    return self.classifier(x).view(-1, 10)
+    return self.module(x)
 
   def training_step(self, batch, batch_idx):
     opt = self.optimizers()
@@ -122,6 +107,72 @@ class Cifar10Net(pl.LightningModule):
   @staticmethod
   def compute_loss(output, targets):
     return F.cross_entropy(output, targets)
+
+
+class Cifar10Net(MSDPBase):
+  def __init__(self, *args):
+    super(Cifar10Net, self).__init__(args)
+
+    self._NUM_CLASSES = 10
+    self.module = nn.Sequential(
+      nn.Conv2d(3, 32, kernel_size=3, padding=1),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(32, 64, kernel_size=3, padding=1),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(64, 128, kernel_size=3, padding=1),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(128, self._NUM_CLASSES, kernel_size=4),
+      # nn.Softmax(dim=1),
+      # nn.LogSoftmax(dim=1)
+    )
+
+    # self.module = convert_batchnorm_modules(resnet18(num_classes=NUM_CLASSES))
+
+  def forward(self, x):
+    return self.module(x).view(-1, self._NUM_CLASSES)
+
+
+class MnistCNNNet(MSDPBase):
+  def __init__(self, *args):
+    super(MnistCNNNet, self).__init__(args)
+
+    self._NUM_CLASSES = 10
+    self.module = nn.Sequential(
+      nn.Conv2d(1, 32, kernel_size=3),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(32, 64, kernel_size=3),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(64, 128, kernel_size=3),
+      nn.Conv2d(128, self._NUM_CLASSES, kernel_size=3),
+      # nn.Softmax(dim=1),
+      # nn.LogSoftmax(dim=1)
+    )
+
+  def forward(self, x):
+    return self.module(x).view(-1, self._NUM_CLASSES)
+
+
+class MnistFCNet(MSDPBase):
+  def __init__(self, *args):
+    super(MnistFCNet, self).__init__(args)
+
+    self._NUM_CLASSES = 10
+    self.module = nn.Sequential(
+      nn.Linear(28 * 28, 256),
+      nn.ReLU(True),
+      nn.Linear(256, 128),
+      nn.ReLU(True),
+      nn.Linear(128, 10),
+      # nn.Softmax(dim=1)
+    )
+
+  def forward(self, x):
+    return self.module(x.view(-1, 28 * 28)).view(-1, self._NUM_CLASSES)
 
 
 class AttackModel(nn.Module):
