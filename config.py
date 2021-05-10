@@ -69,3 +69,6 @@ class ExperimentConfig:
     for k, v in self.__dict__.items():
       s += f'{k}: {v}\n'
     return s
+
+  def set_value(self, k, v):
+    self.__dict__[k] = v

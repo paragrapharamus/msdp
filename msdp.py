@@ -199,6 +199,8 @@ class MSPDTrainer:
       self.model.cpu()
       self.log(f"Test results: {results}")
 
+      return results
+
   def train_and_test(self):
     model = self.train()
     self.test()

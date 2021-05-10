@@ -21,6 +21,7 @@ class MSDPBase(pl.LightningModule):
     self.training_losses = []
     self.training_accuracies = []
     self.validation_accuracies = []
+    self.test_accuracy = -1
 
   @property
   def automatic_optimization(self) -> bool:
@@ -90,6 +91,7 @@ class MSDPBase(pl.LightningModule):
     if self.personal_log_fn:
       epoch_loss = torch.stack([x['test_loss'] for x in outputs]).mean()
       self.personal_log_fn(f"Test - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
+    self.test_accuracy = accuracy.item()
 
   def add_optimizer(self, optimizer):
     self._optimizer = optimizer
