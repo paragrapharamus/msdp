@@ -7,6 +7,7 @@ import numpy as np
 import pytorch_lightning as pl
 from torch import nn
 from matplotlib import pyplot as plt
+from shutil import move, rmtree
 
 from attacks import model_extraction, membership_inference_black_box, model_extraction_knockoffnets
 from config import ExperimentConfig
@@ -266,6 +267,16 @@ def opacus_training_on_cifar10():
 
 @experiment
 def fl_simulation_on_cifar10():
+
+  local = True
+
+  if local:
+    save_dir = results_dir = 'out/'
+  else:
+    save_dir = '/tmp/va4317/out/'
+    os.makedirs(save_dir, exist_ok=True)
+    results_dir = '/bitbucket/va4317/msdp/out/'
+
   args = ExperimentConfig()
   args.name = "FL Simulation on CIFAR10"
   model_cls = Cifar10Net
@@ -274,9 +285,11 @@ def fl_simulation_on_cifar10():
   device = torch.device("cuda" if use_cuda else "cpu")
 
   train_dataset, test_dataset = get_dataset('cifar10', False)
-  args.experiment_id = _get_next_available_dir('out/lightning_logs', 'experiment', False, False)
 
-  args.save_model_path = _get_next_available_dir('out/', 'checkpoints', True, True)
+  args.save_dir = save_dir
+  args.experiment_id = _get_next_available_dir(f'{save_dir}/lightning_logs', 'experiment', False, False)
+
+  args.save_model_path = _get_next_available_dir(save_dir, 'checkpoints', True, True)
   fl_simulator = FLEnvironment(model_class=model_cls,
                                train_dataset=train_dataset,
                                test_dataset=test_dataset,
@@ -292,6 +305,13 @@ def fl_simulation_on_cifar10():
                                args=args)
 
   model = fl_simulator.get_model()
+
+  # move logs to results_dir if non-local training
+  if not local:
+    file_names = os.listdir(save_dir)
+    for file_name in file_names:
+      move(os.path.join(save_dir, file_name), results_dir)
+    rmtree(save_dir)
 
   attack_model(args, device, 'cifar10', model_cls, model, logger=fl_simulator.logger)
 

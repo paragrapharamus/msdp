@@ -85,7 +85,9 @@ class Client:
                                      virtual_batches=virtual_batches,
                                      id=id,
                                      logger=logger,
-                                     experiment_id=experiment_id)
+                                     experiment_id=experiment_id,
+                                     save_dir=args.save_dir
+                                     )
 
     # Attach the DP Stages if their parameters are provided
     if args.stage1:

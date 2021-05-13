@@ -87,7 +87,7 @@ class Aggregator:
       self._aggregate_models()
       self.log("Validation... ")
       results = self.test(self.val_dataloader)
-      self.val_accuracies.append(results['test_acc_epoch'])
+      self.val_accuracies.append(results[0]['test_acc_epoch'])
 
       if self.dp_stage:
         self.dp_stage.apply(self.model, self.rounds,
@@ -107,6 +107,10 @@ class Aggregator:
 
   def save_model(self, path):
     self.trainer.save_checkpoint(path)
+
+  def save_stats(self, path):
+    with open(path, 'wb') as f:
+      np.save(f, np.array(self.val_accuracies))
 
   def _send_model_and_train(self):
     for client in self.current_round_clients:

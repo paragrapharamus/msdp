@@ -17,17 +17,18 @@ class MSPDTrainer:
   """
   Multistage differentially private trainer
 
-    :param model:
-    :param data_loaders:
-    :param epochs:
-    :param batch_size:
-    :param device:
-    :param optimizer:
-    :param logger:
-    :param save_checkpoint:
-    :param gpus:
-    :param id:
-    :param experiment_id:
+    :param model: The model to be trained
+    :param data_loaders: the training dataloader of a list of dataloaders
+    :param epochs: the number of epochs
+    :param batch_size: the batch size
+    :param device: the device on which data is processed
+    :param optimizer: the model's optimizer
+    :param logger: the logger
+    :param save_checkpoint: if a checkpoint should be saved
+    :param gpus: the number of gpus to train on or their indices
+    :param id: the id of the trainer
+    :param experiment_id: the id of the current experiment
+    :param save_dir: where to save data if needed
   """
   STATS_FMT = "[{:>5s}] loss: {:+.4f}, acc: {:.4f}"
 
@@ -43,7 +44,8 @@ class MSPDTrainer:
                save_checkpoint: Optional[bool] = False,
                gpus: Optional[Union[int, List[int]]] = 1,
                id: Optional[int] = 0,
-               experiment_id: Optional[int] = None):
+               experiment_id: Optional[int] = None,
+               save_dir: Optional[str] = 'out/'):
 
     self.id = f'MSDPTrainer_{id}'
     self.model = model
@@ -51,7 +53,7 @@ class MSPDTrainer:
     self.trainer_callbacks = None
     self.checkpoint_dir = None
     if save_checkpoint:
-      self.checkpoint_dir = self._get_next_available_dir('out/', 'checkpoints',
+      self.checkpoint_dir = self._get_next_available_dir(save_dir, 'checkpoints',
                                                          absolute_path=True)
       checkpoint_callback = ModelCheckpoint(
         monitor='valid_acc_epoch',
@@ -67,7 +69,7 @@ class MSPDTrainer:
     self.trainer = None
 
     # creating the TensorBoard logging
-    __logs_dir = 'out/lightning_logs'
+    __logs_dir = f'{save_dir}/lightning_logs'
     if not experiment_id:
       experiment_id = self._get_next_available_dir(__logs_dir, 'experiment',
                                                    False, False, False)

@@ -10,7 +10,7 @@ class ExperimentConfig:
     ##########################
     self.batch_size = 256
     self.test_batch_size = 1000
-    self.epochs = 10
+    self.epochs = 1
     self.lr = 0.02
     self.gamma = 0.7
     self.weight_decay = 5e-4
@@ -20,6 +20,7 @@ class ExperimentConfig:
     self.seed = 42
     self.save_model = True
     self.save_model_path = 'model.pth'
+    self.save_dir = 'out/'
     self.trained_model_path = './checkpoints/checkpoint.pth'
 
     ##########################
@@ -49,7 +50,7 @@ class ExperimentConfig:
     ##########################
     # FL arguments
     ##########################
-    self.num_rounds = 10
+    self.num_rounds = 1
     self.num_clients = 5
     self.clients_per_round = 0
     self.client_optimizer_class = torch.optim.SGD
@@ -60,8 +61,8 @@ class ExperimentConfig:
     ##########################
     # Enable Attacks
     ##########################
-    self.membership_inference = True
-    self.model_extraction = True
+    self.membership_inference = False
+    self.model_extraction = False
     self.knockoffnet_extraction = False
 
   def __repr__(self):

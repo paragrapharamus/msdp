@@ -82,7 +82,7 @@ class FLEnvironment:
 
     self.logger = logger
     if logger is None:
-      self.logger = Logger([sys.stdout, f'{args.save_model_path}/msdp.log'])
+      self.logger = Logger([sys.stdout, f'{args.save_model_path}/fl.log'])
 
     # Allocate data for each client and ge the global val/test splits
     training_data_splits, val_dataset = self._split_dataset(train_dataset,
@@ -125,6 +125,9 @@ class FLEnvironment:
     if args.save_model:
       self.aggregator.save_model(
         os.path.join(args.save_model_path, 'final.ckpt')
+      )
+      self.aggregator.save_stats(
+        os.path.join(args.save_model_path, 'stats.npy')
       )
 
   def log(self, *msg):
@@ -342,6 +345,6 @@ class FLEnvironment:
         per_client_distribution[k][present_cls[i]] = client_cls_distr[i]
 
     fig, ax = draw_plot(per_client_distribution, class_names)
-    fig.savefig("out/clients_class_distributions.png")
+    fig.savefig(f"{self.args.save_dir}/clients_class_distributions.png")
 
 
