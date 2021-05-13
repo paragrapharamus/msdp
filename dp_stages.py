@@ -326,7 +326,7 @@ class Stage4(DPStage):
     beta = - np.log(1 - 1 / cs +
                  np.exp(-self.eps / (max_exposure * np.sqrt(selected_clients))) / cs)
     if rounds <= self.eps / beta:
-      return 0
+      return 1e-4
     else:
       c = np.sqrt(2 * np.log(1.25 / delta))
       nom = 2 * c * self.max_weight_norm * \
