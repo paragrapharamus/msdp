@@ -50,7 +50,8 @@ class Client:
                eps3: Optional[float] = None,
                max_weight_norm: Optional[float] = None,
                logger: Optional[Logger] = None,
-               experiment_id: Optional[int] = 0):
+               experiment_id: Optional[int] = 0,
+               args = None):
 
     self.id = id
     self.model_class = model_class
@@ -86,13 +87,13 @@ class Client:
                                      experiment_id=experiment_id)
 
     # Attach the DP Stages if their parameters are provided
-    if eps1:
+    if args.stage1:
       self.model_trainer.attach_stage(Stages.STAGE_1, {'eps': eps1,
                                                        'max_grad_norm': max_grad_norm})
-    if noise_multiplier or max_grad_norm:
+    if args.stage2:
       self.model_trainer.attach_stage(Stages.STAGE_2, {'noise_multiplier': noise_multiplier,
                                                        'max_grad_norm': max_grad_norm})
-    if eps3:
+    if args.stage3:
       self.model_trainer.attach_stage(Stages.STAGE_3, {'eps': eps3,
                                                        'max_weight_norm': max_weight_norm})
 

@@ -211,7 +211,7 @@ def msdp_stage_effect_on_cifar10():
 
   eps1_range = [0.5, 2, 4, 8, 10, 15, 20]
   noise_multiplier_range = [0.1, 0.3, 0.5, 0.7, 0.8, 1]
-  eps3_range = [0.25, 0.5, 0.75, 1, 2, 3]
+  eps3_range = [0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]
 
   ranges = {'eps1': eps1_range, 'noise_multiplier': noise_multiplier_range, 'eps3': eps3_range}
 
@@ -230,6 +230,7 @@ def msdp_stage_effect_on_cifar10():
       mia_acc.append(attack_results['MIA']['accuracy'])
 
     with open(f'./{name}.npy', 'wb') as f:
+      np.save(f, np.array(rng))
       np.save(f, np.array(test_acc))
       np.save(f, np.array(mea_fid))
       np.save(f, np.array(mia_acc))
@@ -395,9 +396,7 @@ def fl_simulation_on_mnist():
 
 def run_experiments():
   experiments = [
-    # non_private_training_on_mnist,
-    msdp_stage_effect_on_cifar10,
-    # opacus_training_on_mnist,
+    fl_simulation_on_cifar10
   ]
 
   for exp in experiments:
@@ -435,20 +434,30 @@ def attack_test():
                checkpoint_path='out/opacus_training/opacus_model.pth')
 
 
-def _plot(data_dict, y_label, title):
+def _plot(data_dict, x_label, y_label, title):
   fig, ax = plt.subplots()  # (figsize=(10,10))
 
-  for name, data in data_dict.items():
-    ax.plot(data, label=name)
+  if 'x_ticks' in data_dict:
+    x_values = data_dict.pop('x_ticks')
+  else:
+    x_values = None
 
+  for name, data in data_dict.items():
+    if x_values:
+      ax.plot(list(range(len(x_values))), data, label=name)
+    else:
+      ax.plot(data, label=name)
+
+  if x_values:
+    plt.xticks(list(range(len(x_values))), x_values)
   ax.legend()
-  plt.xlabel('Epoch')
+  plt.xlabel(x_label)
   plt.ylabel(y_label)
   plt.title(title)
   plt.show()
 
 
-def load_and_plot():
+def load_and_plot_learning_curves():
   def fetch(fs, metric_name):
     metric_data = dict()
     for f in fs:
@@ -457,10 +466,10 @@ def load_and_plot():
 
   metrics = ['train_loss', 'train_acc', 'val_acc']
 
-  msdp = {'name': 'MSDP', 'fp': "out/MNIST/fc/checkpoints_6/MSDPTrainer_0_plot_stats.npy"}
-  opacus = {'name': 'Opacus', 'fp': "out/MNIST/fc/opacus_training/opacus_training_stats.npy"}
-  non_private = {'name': 'Non-Private', 'fp': "out/MNIST/fc/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
-  title = 'MLP on MNIST'
+  msdp = {'name': 'MSDP', 'fp': "out/MNIST/cnn/checkpoints_2/MSDPTrainer_0_plot_stats.npy"}
+  opacus = {'name': 'Opacus', 'fp': "out/MNIST/cnn/opacus_training/opacus_training_stats.npy"}
+  non_private = {'name': 'Non-Private', 'fp': "out/MNIST/cnn/checkpoints_4/MSDPTrainer_0_plot_stats.npy"}
+  title = 'CNN on MNIST'
 
   # msdp = {'name': 'MSDP', 'fp': "out/0_slurm_1/checkpoints_2/MSDPTrainer_0_plot_stats.npy"}
   # non_private = {'name': 'Non-Private', 'fp': "out/0_slurm_1/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
@@ -480,11 +489,30 @@ def load_and_plot():
 
   for metric in metrics:
     metric_data = fetch(files, metric)
-    _plot(metric_data, metric, title)
+    _plot(metric_data, 'Epochs', metric, title)
+
+
+def load_and_plot_privacy_param_variation():
+  eps1 = {'name': 'eps_1', 'fp': './eps1.npy', 'range': [0.5, 2, 4, 8, 10, 15, 20]}
+  noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy', 'range': [0.1, 0.3, 0.5, 0.7, 0.8, 1]}
+  eps3 = {'name': 'eps_3', 'fp': './eps3.npy', 'range':  [0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]}
+
+  files = [eps1, noise_multiplier, eps3]
+  curve_names = ['Test accuracy', 'MEA fidelity', 'MIA accuracy']
+
+  for data_file in files:
+    data = dict()
+    with open(data_file['fp'], 'rb') as f:
+      #  data['x_ticks'] = np.load(f)
+      for curve in curve_names:
+        data[curve] = np.load(f)
+    data['x_ticks'] = data_file['range']
+    _plot(data, data_file['name'], 'Privacy and Utility', 'Small CNN on Cifar10')
 
 
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
-  # load_and_plot()
+  # load_and_plot_privacy_param_variation()
+  # load_and_plot_learning_curves()
   run_experiments()
   # attack_test()

@@ -25,10 +25,10 @@ class ExperimentConfig:
     ##########################
     # MSDP
     ##########################
-    self.stage1 = True
-    self.stage2 = True
-    self.stage3 = True
-    self.stage4 = True
+    self.stage1 = False
+    self.stage2 = False
+    self.stage3 = False
+    self.stage4 = False
 
     # Stage 1
     self.eps1 = 10
@@ -50,7 +50,7 @@ class ExperimentConfig:
     # FL arguments
     ##########################
     self.num_rounds = 25
-    self.num_clients = 10
+    self.num_clients = 5
     self.clients_per_round = 0
     self.client_optimizer_class = torch.optim.SGD
     self.partition_method = 'heterogeneous'

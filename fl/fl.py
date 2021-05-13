@@ -3,6 +3,8 @@ import sys
 from copy import deepcopy
 from typing import Optional, Tuple, Type, List, Dict, Union
 
+from matplotlib import pyplot as plt
+
 from datasets.dataset_util import truncate_dataset, train_test_split
 import numpy as np
 import pytorch_lightning as pl
@@ -151,9 +153,15 @@ class FLEnvironment:
     self.log("Creating the clients...")
     clients = []
     n_training_data = 0
+
+    client_class_distributions = dict()
     for client_id in range(self.num_clients):
       # Create the data loaders
       client_dataset = training_data_splits[client_id]
+
+      present_classes = np.unique(client_dataset.targets)
+      class_distribution = np.bincount(client_dataset.targets)
+      client_class_distributions[client_id] = (present_classes, class_distribution)
 
       # Generate local test splits
       if client_local_test_split:
@@ -184,8 +192,11 @@ class FLEnvironment:
                       eps3=self.args.eps3,
                       max_weight_norm=self.args.max_weight_norm,
                       logger=self.logger,
-                      experiment_id=self.args.experiment_id)
+                      experiment_id=self.args.experiment_id,
+                      args=self.args)
       clients.append(client)
+
+    self._plot_client_class_distribution(client_class_distributions, client_dataset.classes)
     return clients, n_training_data
 
   def _split_dataset(self,
@@ -280,3 +291,55 @@ class FLEnvironment:
     else:
       raise ValueError("Invalid partition method")
     return train_dataset, val_dataset, id2idxs, num_classes
+
+  def _plot_client_class_distribution(
+      self,
+      client_class_distributions: Dict[int, Tuple[np.ndarray, np.ndarray]],
+      class_names: List[str]
+  ):
+
+    def draw_plot(per_client_distribution, class_names):
+      """
+      Source
+      https://matplotlib.org/stable/gallery/lines_bars_and_markers/
+          horizontal_barchart_distribution.html
+      """
+      labels = list(per_client_distribution.keys())
+      data = np.array(list(per_client_distribution.values()))
+      data_cum = data.cumsum(axis=1)
+      category_colors = plt.get_cmap('tab20c')(
+        np.linspace(0.15, 0.85, data.shape[1]))
+
+      fig, ax = plt.subplots(figsize=(11, 5))
+      ax.invert_yaxis()
+      ax.xaxis.set_visible(False)
+      ax.set_xlim(0, np.sum(data, axis=1).max())
+
+      for i, (colname, color) in enumerate(zip(class_names, category_colors)):
+        widths = data[:, i]
+        starts = data_cum[:, i] - widths
+        rects = ax.barh(labels, widths, left=starts, height=0.5,
+                        label=colname, color=color)
+
+        r, g, b, _ = color
+        text_color = 'white' if r * g * b < 0.5 else 'darkgrey'
+        # ax.bar_label(rects, label_type='center', color=text_color)
+      ax.legend(ncol=len(class_names), bbox_to_anchor=(0, 1),
+                loc='lower left', fontsize='small')
+
+      return fig, ax
+
+    total_num_classes = len(class_names)
+    per_client_distribution = dict()
+
+    for client, (present_cls, client_cls_distr) in client_class_distributions.items():
+      k = f'Client {client}'
+      per_client_distribution[k] = [0] * total_num_classes
+      for i in range(len(present_cls)):
+        per_client_distribution[k][present_cls[i]] = client_cls_distr[i]
+
+    fig, ax = draw_plot(per_client_distribution, class_names)
+    fig.savefig("out/clients_class_distributions.png")
+    exit(0)
+
+
