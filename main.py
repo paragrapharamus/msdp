@@ -42,12 +42,17 @@ def attack_model(args: ExperimentConfig,
                  architecture: Type[pl.LightningModule],
                  model: pl.LightningModule = None,
                  checkpoint_path: str = None,
-                 logger: Logger = None):
+                 logger: Logger = None,
+                 include_val_split=True):
   if not model:
     model = architecture.load_from_checkpoint(checkpoint_path)
   model = model.to(device)
 
-  train_dataset, _, test_dataset = get_dataset(dataset_name)
+  datasets = get_dataset(dataset_name, include_val_split)
+  if include_val_split:
+    train_dataset, _, test_dataset = datasets
+  else:
+    train_dataset, test_dataset = datasets
 
   attack_results = dict()
 
@@ -145,6 +150,37 @@ def _train_msdp_and_attack(args, model_cls, dataset_name):
 
   model = trainer.train_and_test()
   attack_results = attack_model(args, device, dataset_name, model_cls, model, logger=trainer.logger)
+
+  return model, attack_results
+
+
+def _train_fl_and_attack(args, model_cls, dataset_name):
+  use_cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if use_cuda else "cpu")
+
+  train_dataset, test_dataset = get_dataset(dataset_name, False)
+
+  args.experiment_id = _get_next_available_dir(f'{args.save_dir}/lightning_logs', 'experiment', False, False)
+  args.save_model_path = _get_next_available_dir(args.save_dir, 'checkpoints', True, True)
+
+  fl_simulator = FLEnvironment(model_class=model_cls,
+                               train_dataset=train_dataset,
+                               test_dataset=test_dataset,
+                               num_clients=args.num_clients,
+                               aggregator_class=Aggregator,
+                               rounds=args.num_rounds,
+                               device=device,
+                               client_optimizer_class=torch.optim.SGD,
+                               clients_per_round=args.clients_per_round,
+                               client_local_test_split=args.client_local_test_split,
+                               partition_method=args.partition_method,
+                               alpha=args.alpha,
+                               args=args)
+
+  model = fl_simulator.get_model()
+
+  attack_results = attack_model(args, device, dataset_name, model_cls,
+                                model, logger=fl_simulator.logger, include_val_split=False)
 
   return model, attack_results
 
@@ -266,10 +302,8 @@ def opacus_training_on_cifar10():
 
 
 @experiment
-def fl_simulation_on_cifar10():
-
-  local = True
-
+def nonprivate_on_cifar10():
+  local = False
   if local:
     save_dir = results_dir = 'out/'
   else:
@@ -278,33 +312,82 @@ def fl_simulation_on_cifar10():
     results_dir = '/bitbucket/va4317/msdp/out/'
 
   args = ExperimentConfig()
-  args.name = "FL Simulation on CIFAR10"
+  args.name = "MSDPFL on CIFAR10"
+  args.save_dir = save_dir
+  args.num_rounds = 10
+  args.epochs = 10
+  args.stage1 = False
+  args.stage2 = False
+  args.stage3 = False
+  args.stage4 = False
+
   model_cls = Cifar10Net
 
-  use_cuda = not args.no_cuda and torch.cuda.is_available()
-  device = torch.device("cuda" if use_cuda else "cpu")
+  _train_fl_and_attack(args, model_cls, 'cifar10')
 
-  train_dataset, test_dataset = get_dataset('cifar10', False)
+  # # move logs to results_dir if non-local training
+  # if not local:
+  #   file_names = os.listdir(save_dir)
+  #   for file_name in file_names:
+  #     move(os.path.join(save_dir, file_name), results_dir)
+  #   rmtree(save_dir)
 
+
+@experiment
+def msdpfl_on_cifar10():
+  local = False
+  if local:
+    save_dir = results_dir = 'out/'
+  else:
+    save_dir = '/tmp/va4317/out/'
+    os.makedirs(save_dir, exist_ok=True)
+    results_dir = '/bitbucket/va4317/msdp/out/'
+
+  args = ExperimentConfig()
+  args.name = "MSDPFL on CIFAR10"
   args.save_dir = save_dir
-  args.experiment_id = _get_next_available_dir(f'{save_dir}/lightning_logs', 'experiment', False, False)
+  args.num_rounds = 25
+  args.epochs = 15
+  args.eps3 = 20
 
-  args.save_model_path = _get_next_available_dir(save_dir, 'checkpoints', True, True)
-  fl_simulator = FLEnvironment(model_class=model_cls,
-                               train_dataset=train_dataset,
-                               test_dataset=test_dataset,
-                               num_clients=args.num_clients,
-                               aggregator_class=Aggregator,
-                               rounds=args.num_rounds,
-                               device=device,
-                               client_optimizer_class=torch.optim.SGD,
-                               clients_per_round=args.clients_per_round,
-                               client_local_test_split=args.client_local_test_split,
-                               partition_method=args.partition_method,
-                               alpha=args.alpha,
-                               args=args)
+  model_cls = Cifar10Net
 
-  model = fl_simulator.get_model()
+  _train_fl_and_attack(args, model_cls, 'cifar10')
+
+  # # move logs to results_dir if non-local training
+  # if not local:
+  #   file_names = os.listdir(save_dir)
+  #   for file_name in file_names:
+  #     move(os.path.join(save_dir, file_name), results_dir)
+  #   rmtree(save_dir)
+
+
+@experiment
+def fl_opacus_on_cifar10():
+  local = False
+  if local:
+    save_dir = results_dir = 'out/'
+  else:
+    save_dir = '/tmp/va4317/out/'
+    os.makedirs(save_dir, exist_ok=True)
+    results_dir = '/bitbucket/va4317/msdp/out/'
+
+  args = ExperimentConfig()
+  args.name = "FL Opacus on CIFAR10"
+  args.save_dir = save_dir
+  args.num_rounds = 25
+  args.epochs = 15
+  args.stage1 = False
+  args.stage2 = True
+  args.stage3 = False
+  args.stage4 = False
+
+  args.noise_multiplier = 0.5
+  args.max_grad_norm = 6
+
+  model_cls = Cifar10Net
+
+  _train_fl_and_attack(args, model_cls, 'cifar10')
 
   # move logs to results_dir if non-local training
   if not local:
@@ -312,8 +395,6 @@ def fl_simulation_on_cifar10():
     for file_name in file_names:
       move(os.path.join(save_dir, file_name), results_dir)
     rmtree(save_dir)
-
-  attack_model(args, device, 'cifar10', model_cls, model, logger=fl_simulator.logger)
 
 
 @experiment
@@ -411,12 +492,14 @@ def fl_simulation_on_mnist():
 
   model = fl_simulator.get_model()
 
-  attack_model(args, device, 'mnist', model_cls, model, logger=fl_simulator.logger)
+  attack_model(args, device, 'mnist', model_cls, model, logger=fl_simulator.logger, include_val_split=False)
 
 
 def run_experiments():
   experiments = [
-    fl_simulation_on_cifar10
+    nonprivate_on_cifar10,
+    msdpfl_on_cifar10,
+    fl_opacus_on_cifar10
   ]
 
   for exp in experiments:
@@ -450,8 +533,7 @@ def attack_test():
   args.model_extraction = True
   # args.knockoffnet_extraction = True
 
-  attack_model(args, device, 'mnist', architecture=model_cls,  # model=model_cls(), )  #
-               checkpoint_path='out/opacus_training/opacus_model.pth')
+  attack_model(args, device, 'mnist', architecture=model_cls, checkpoint_path='out/opacus_training/opacus_model.pth')
 
 
 def _plot(data_dict, x_label, y_label, title):
@@ -515,7 +597,7 @@ def load_and_plot_learning_curves():
 def load_and_plot_privacy_param_variation():
   eps1 = {'name': 'eps_1', 'fp': './eps1.npy', 'range': [0.5, 2, 4, 8, 10, 15, 20]}
   noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy', 'range': [0.1, 0.3, 0.5, 0.7, 0.8, 1]}
-  eps3 = {'name': 'eps_3', 'fp': './eps3.npy', 'range':  [0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]}
+  eps3 = {'name': 'eps_3', 'fp': './eps3.npy', 'range': [0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]}
 
   files = [eps1, noise_multiplier, eps3]
   curve_names = ['Test accuracy', 'MEA fidelity', 'MIA accuracy']

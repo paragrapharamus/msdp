@@ -109,6 +109,10 @@ class FLEnvironment:
     clients_per_round = clients_per_round if clients_per_round > 0 else len(self.clients)
 
     # Initialize the aggregator
+    if args.stage4:
+      eps = args.eps3
+    else:
+      eps = None
     self.aggregator = aggregator_class(model_class=model_class,
                                        clients=self.clients,
                                        clients_per_round=clients_per_round,
@@ -116,6 +120,8 @@ class FLEnvironment:
                                        test_dataloader=test_loader,
                                        total_training_data_size=n_training_data,
                                        rounds=rounds,
+                                       epsilon=eps,
+                                       max_weight_norm=args.max_weight_norm_aggregated,
                                        device=device,
                                        logger=self.logger)
 

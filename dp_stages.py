@@ -257,26 +257,34 @@ class Stage3(DPStage):
     delta = 1 / (1.5 * training_dataset_size)
     # The standard deviation of the Gaussian noise. This is not calibrated yet.
     std = (self.exposures * np.sqrt(2 * np.log(1.25 / delta))) / self.eps
-    self.log(f"Output Perturbation: ({self.eps:.2f}, {delta:.2e})-DP")  # with std={std:.2e}")
 
     # Sanitize the model's parameters to ensure privacy
-    for i, p in enumerate(model.parameters()):
-      if isinstance(self.max_weight_norm, list):
-        clip_val = self.max_weight_norm[i]
-      else:
-        clip_val = self.max_weight_norm
+    with torch.no_grad():
+      for i, p in enumerate(model.parameters()):
+        if isinstance(self.max_weight_norm, list):
+          clip_val = self.max_weight_norm[i]
+        else:
+          clip_val = self.max_weight_norm
 
-      # Clip the weights to a maximum l2 norm
-      p.data /= max(1, torch.norm(p.data) / clip_val)
-      # Calibrate the noise
-      max_sensitivity = 2 * clip_val / training_dataset_size
-      sensitivity_calibrated_std = max_sensitivity * std
-      # Inject noise into the weights
-      noise = torch.normal(mean=0,
-                           std=sensitivity_calibrated_std,
-                           size=p.shape
-                           ).to(p.data.device)
-      p.data.add_(noise)
+        # Clip the weights to a maximum l2 norm
+        p.data /= max(1, torch.norm(p.data) / clip_val)
+        # Calibrate the noise
+        max_sensitivity = 2 * clip_val / training_dataset_size
+        sensitivity_calibrated_std = max_sensitivity * std
+        # Inject noise into the weights
+        noise = torch.normal(mean=0,
+                             std=sensitivity_calibrated_std,
+                             size=p.shape
+                             ).to(p.data.device)
+        p.data.add_(noise)
+    # logging
+    if isinstance(self.max_weight_norm, list):
+      avg_clip_val = sum(self.max_weight_norm) / len(self.max_weight_norm)
+    else:
+      avg_clip_val = self.max_weight_norm
+    std *= 2 * avg_clip_val / training_dataset_size
+    self.log(f"Output Perturbation: ({self.eps:.2f}, {delta:.2e})-DP with std={std:.2e}")
+
     return model
 
   def set_exposures(self, exposures: int):

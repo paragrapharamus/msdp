@@ -34,8 +34,10 @@ class Logger:
 
   def _empty_buffer(self):
     if len(self.buffer) > 0:
+      content = ''.join(self.buffer)
       for file in self.log_files:
-        print(*self.buffer, file=file)
+        print(content, file=file, end='')
+      self.buffer = []
 
   def log_waring(self, *message, module=''):
     time = datetime.now()

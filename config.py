@@ -10,7 +10,7 @@ class ExperimentConfig:
     ##########################
     self.batch_size = 256
     self.test_batch_size = 1000
-    self.epochs = 1
+    self.epochs = 10
     self.lr = 0.02
     self.gamma = 0.7
     self.weight_decay = 5e-4
@@ -26,10 +26,10 @@ class ExperimentConfig:
     ##########################
     # MSDP
     ##########################
-    self.stage1 = False
-    self.stage2 = False
-    self.stage3 = False
-    self.stage4 = False
+    self.stage1 = True
+    self.stage2 = True
+    self.stage3 = True
+    self.stage4 = True
 
     # Stage 1
     self.eps1 = 10
@@ -44,25 +44,25 @@ class ExperimentConfig:
     self.max_weight_norm = 20
 
     # Stage 4
-    self.eps4 = 1
     self.max_weight_norm_aggregated = 20
 
     ##########################
     # FL arguments
     ##########################
-    self.num_rounds = 1
+    self.num_rounds = 10
     self.num_clients = 5
     self.clients_per_round = 0
     self.client_optimizer_class = torch.optim.SGD
     self.partition_method = 'heterogeneous'
     self.alpha = 50
     self.client_local_test_split = 0.1
+    self.experiment_id = None
 
     ##########################
     # Enable Attacks
     ##########################
-    self.membership_inference = False
-    self.model_extraction = False
+    self.membership_inference = True
+    self.model_extraction = True
     self.knockoffnet_extraction = False
 
   def __repr__(self):

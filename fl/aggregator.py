@@ -45,7 +45,9 @@ class Aggregator:
 
     self.model_class = model_class
     self.model = None
-    self.trainer = Trainer(weights_summary=None, gpus=1)
+    self.trainer = Trainer(weights_summary=None,
+                           progress_bar_refresh_rate=0,
+                           gpus=1)
     self.clients = clients
     self.clients_per_round = clients_per_round
     self.current_round_clients = []
