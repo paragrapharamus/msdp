@@ -1,6 +1,7 @@
 import sys
 from datetime import datetime
 
+
 class Logger:
   STD_files = [sys.stdout, sys.stderr]
 
@@ -11,11 +12,14 @@ class Logger:
         self.log_files.append(open(file, 'w+'))
       else:
         self.log_files.append(file)  # assuming file is a valid open file
+    self.buffer = []
+    self._MAX_BUFFER_SIZE = 500
 
   def __del__(self):
     self.close()
 
   def close(self):
+    self._empty_buffer()
     for file in self.log_files:
       if file not in Logger.STD_files:
         file.close()
@@ -23,8 +27,15 @@ class Logger:
   def log(self, *message, module=''):
     time = datetime.now()
     time = str(time.strftime("%d/%m/%Y,%H:%M:%S"))
-    for file in self.log_files:
-      print(f'[{time}] [{module}]', *message, file=file)
+    msg = f"[{time}] [{module}] {' '.join(message)}\n"
+    self.buffer.append(msg)
+    if len(self.buffer) > self._MAX_BUFFER_SIZE:
+      self._empty_buffer()
+
+  def _empty_buffer(self):
+    if len(self.buffer) > 0:
+      for file in self.log_files:
+        print(*self.buffer, file=file)
 
   def log_waring(self, *message, module=''):
     time = datetime.now()

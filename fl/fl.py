@@ -323,7 +323,10 @@ class FLEnvironment:
 
         r, g, b, _ = color
         text_color = 'white' if r * g * b < 0.5 else 'darkgrey'
-        # ax.bar_label(rects, label_type='center', color=text_color)
+        try:
+          ax.bar_label(rects, label_type='center', color=text_color)
+        except:
+          pass
       ax.legend(ncol=len(class_names), bbox_to_anchor=(0, 1),
                 loc='lower left', fontsize='small')
 
@@ -340,6 +343,5 @@ class FLEnvironment:
 
     fig, ax = draw_plot(per_client_distribution, class_names)
     fig.savefig("out/clients_class_distributions.png")
-    exit(0)
 
 

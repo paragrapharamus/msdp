@@ -107,7 +107,7 @@ class MSPDTrainer:
     if logger is None:
       d = self.checkpoint_dir if self.checkpoint_dir else '.'
       self.logger = Logger([sys.stdout, f'{d}/msdp.log'])
-      self.model.personal_log_fn = self.log
+    self.model.personal_log_fn = self.log
 
   def attach_stage(self, stage_type: Stages, stage_param_dict: dict):
     if stage_type == Stages.STAGE_1:

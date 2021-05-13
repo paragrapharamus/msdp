@@ -64,6 +64,8 @@ class Aggregator:
       self.max_exposures = 0
       self.min_client_dataset = total_training_data_size
 
+    self.val_accuracies = []
+
   def train_and_test(self):
     self.train()
     self.log("Testing... ")
@@ -84,7 +86,8 @@ class Aggregator:
       self._send_model_and_train()
       self._aggregate_models()
       self.log("Validation... ")
-      self.test(self.val_dataloader)
+      results = self.test(self.val_dataloader)
+      self.val_accuracies.append(results['test_acc_epoch'])
 
       if self.dp_stage:
         self.dp_stage.apply(self.model, self.rounds,
@@ -100,13 +103,15 @@ class Aggregator:
     results = self.trainer.test(self.model, loader)
     self.log(f"Global model results: {results}")
     self.model.cpu()
+    return results
 
   def save_model(self, path):
     self.trainer.save_checkpoint(path)
 
   def _send_model_and_train(self):
     for client in self.current_round_clients:
-      params = deepcopy(list(self.model.parameters()))
+      with torch.no_grad():
+        params = deepcopy(list(self.model.parameters()))
       client.update_model(params)
       client.train()
       client.test()

@@ -32,6 +32,7 @@ class Client:
   :param logger: the logger
   :param experiment_id: the experiment id
   """
+
   def __init__(self,
                id: int,
                model_class: Type[LightningModule],
@@ -51,7 +52,7 @@ class Client:
                max_weight_norm: Optional[float] = None,
                logger: Optional[Logger] = None,
                experiment_id: Optional[int] = 0,
-               args = None):
+               args=None):
 
     self.id = id
     self.model_class = model_class

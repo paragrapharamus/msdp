@@ -10,7 +10,7 @@ class ExperimentConfig:
     ##########################
     self.batch_size = 256
     self.test_batch_size = 1000
-    self.epochs = 25
+    self.epochs = 10
     self.lr = 0.02
     self.gamma = 0.7
     self.weight_decay = 5e-4
@@ -49,7 +49,7 @@ class ExperimentConfig:
     ##########################
     # FL arguments
     ##########################
-    self.num_rounds = 25
+    self.num_rounds = 10
     self.num_clients = 5
     self.clients_per_round = 0
     self.client_optimizer_class = torch.optim.SGD
