@@ -308,13 +308,15 @@ def nonprivate_on_cifar10():
     save_dir = results_dir = 'out/'
   else:
     save_dir = '/tmp/va4317/out/'
+    if os.path.exists(save_dir):
+      rmtree(save_dir)
     os.makedirs(save_dir, exist_ok=True)
-    results_dir = '/bitbucket/va4317/msdp/out/'
+    results_dir = '/vol/bitbucket/va4317/msdp/out/'
 
   args = ExperimentConfig()
   args.name = "MSDPFL on CIFAR10"
   args.save_dir = save_dir
-  args.num_rounds = 10
+  args.num_rounds = 15
   args.epochs = 10
   args.stage1 = False
   args.stage2 = False
@@ -341,12 +343,12 @@ def msdpfl_on_cifar10():
   else:
     save_dir = '/tmp/va4317/out/'
     os.makedirs(save_dir, exist_ok=True)
-    results_dir = '/bitbucket/va4317/msdp/out/'
+    results_dir = '/vol/bitbucket/va4317/msdp/out/'
 
   args = ExperimentConfig()
   args.name = "MSDPFL on CIFAR10"
   args.save_dir = save_dir
-  args.num_rounds = 25
+  args.num_rounds = 15
   args.epochs = 15
   args.eps3 = 20
 
@@ -370,19 +372,19 @@ def fl_opacus_on_cifar10():
   else:
     save_dir = '/tmp/va4317/out/'
     os.makedirs(save_dir, exist_ok=True)
-    results_dir = '/bitbucket/va4317/msdp/out/'
+    results_dir = '/vol/bitbucket/va4317/msdp/out/'
 
   args = ExperimentConfig()
   args.name = "FL Opacus on CIFAR10"
   args.save_dir = save_dir
-  args.num_rounds = 25
+  args.num_rounds = 15
   args.epochs = 15
   args.stage1 = False
   args.stage2 = True
   args.stage3 = False
   args.stage4 = False
 
-  args.noise_multiplier = 0.5
+  args.noise_multiplier = 0.75
   args.max_grad_norm = 6
 
   model_cls = Cifar10Net
