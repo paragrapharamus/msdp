@@ -302,14 +302,12 @@ def opacus_training_on_cifar10():
 
 
 @experiment
-def nonprivate_on_cifar10():
+def nonprivate_fl_on_cifar10():
   local = False
   if local:
     save_dir = results_dir = 'out/'
   else:
     save_dir = '/tmp/va4317/out/'
-    if os.path.exists(save_dir):
-      rmtree(save_dir)
     os.makedirs(save_dir, exist_ok=True)
     results_dir = '/vol/bitbucket/va4317/msdp/out/'
 
@@ -499,7 +497,7 @@ def fl_simulation_on_mnist():
 
 def run_experiments():
   experiments = [
-    nonprivate_on_cifar10,
+    nonprivate_fl_on_cifar10,
     msdpfl_on_cifar10,
     fl_opacus_on_cifar10
   ]

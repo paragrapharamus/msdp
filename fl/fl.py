@@ -83,7 +83,7 @@ class FLEnvironment:
     self.logger = logger
     if logger is None:
       self.logger = Logger([sys.stdout, f'{args.save_model_path}/fl.log'])
-    self.logger.log(self.args)
+    self.logger.log(str(args))
 
     # Allocate data for each client and ge the global val/test splits
     training_data_splits, val_dataset = self._split_dataset(train_dataset,

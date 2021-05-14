@@ -71,5 +71,8 @@ class ExperimentConfig:
       s += f'{k}: {v}\n'
     return s
 
+  def __str__(self):
+    return self.__repr__()
+
   def set_value(self, k, v):
     self.__dict__[k] = v
