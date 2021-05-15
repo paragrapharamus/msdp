@@ -5,7 +5,7 @@ from datetime import datetime
 class Logger:
   STD_files = [sys.stdout, sys.stderr]
 
-  def __init__(self, log_files):
+  def __init__(self, log_files, max_buffer_size=1156):
     self.log_files = []
     for file in log_files:
       if isinstance(file, str):
@@ -13,7 +13,7 @@ class Logger:
       else:
         self.log_files.append(file)  # assuming file is a valid open file
     self.buffer = []
-    self._MAX_BUFFER_SIZE = 500
+    self._MAX_BUFFER_SIZE = max_buffer_size
 
   def __del__(self):
     self.close()

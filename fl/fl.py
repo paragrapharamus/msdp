@@ -352,6 +352,5 @@ class FLEnvironment:
         per_client_distribution[k][present_cls[i]] = client_cls_distr[i]
 
     fig, ax = draw_plot(per_client_distribution, class_names)
-    fig.savefig(f"{self.args.save_dir}/clients_class_distributions.png")
-
+    fig.savefig(f"{self.args.save_dir}/clients_class_distributions.png", bbox_inches='tight')
 

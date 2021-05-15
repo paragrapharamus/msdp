@@ -303,7 +303,7 @@ def opacus_training_on_cifar10():
 
 @experiment
 def nonprivate_fl_on_cifar10():
-  local = False
+  local = True
   if local:
     save_dir = results_dir = 'out/'
   else:
@@ -312,9 +312,9 @@ def nonprivate_fl_on_cifar10():
     results_dir = '/vol/bitbucket/va4317/msdp/out/'
 
   args = ExperimentConfig()
-  args.name = "MSDPFL on CIFAR10"
+  args.name = "Non-Private on CIFAR10"
   args.save_dir = save_dir
-  args.num_rounds = 15
+  args.num_rounds = 10
   args.epochs = 10
   args.stage1 = False
   args.stage2 = False
@@ -326,16 +326,16 @@ def nonprivate_fl_on_cifar10():
   _train_fl_and_attack(args, model_cls, 'cifar10')
 
   # # move logs to results_dir if non-local training
-  # if not local:
-  #   file_names = os.listdir(save_dir)
-  #   for file_name in file_names:
-  #     move(os.path.join(save_dir, file_name), results_dir)
-  #   rmtree(save_dir)
+  if not local:
+    file_names = os.listdir(save_dir)
+    for file_name in file_names:
+      move(os.path.join(save_dir, file_name), results_dir)
+    rmtree(save_dir)
 
 
 @experiment
 def msdpfl_on_cifar10():
-  local = False
+  local = True
   if local:
     save_dir = results_dir = 'out/'
   else:
@@ -346,25 +346,30 @@ def msdpfl_on_cifar10():
   args = ExperimentConfig()
   args.name = "MSDPFL on CIFAR10"
   args.save_dir = save_dir
-  args.num_rounds = 15
+  args.num_rounds = 10
   args.epochs = 15
+  args.eps1 = 10
+  args.noise_multiplier = 0.5
+  args.max_grad_norm = 6
   args.eps3 = 20
+  args.max_weight_norm = 20
+  args.max_weight_norm_aggregated = 20
 
   model_cls = Cifar10Net
 
   _train_fl_and_attack(args, model_cls, 'cifar10')
 
   # # move logs to results_dir if non-local training
-  # if not local:
-  #   file_names = os.listdir(save_dir)
-  #   for file_name in file_names:
-  #     move(os.path.join(save_dir, file_name), results_dir)
-  #   rmtree(save_dir)
+  if not local:
+    file_names = os.listdir(save_dir)
+    for file_name in file_names:
+      move(os.path.join(save_dir, file_name), results_dir)
+    rmtree(save_dir)
 
 
 @experiment
 def fl_opacus_on_cifar10():
-  local = False
+  local = True
   if local:
     save_dir = results_dir = 'out/'
   else:
@@ -375,7 +380,7 @@ def fl_opacus_on_cifar10():
   args = ExperimentConfig()
   args.name = "FL Opacus on CIFAR10"
   args.save_dir = save_dir
-  args.num_rounds = 15
+  args.num_rounds = 10
   args.epochs = 15
   args.stage1 = False
   args.stage2 = True
@@ -464,42 +469,104 @@ def opacus_training_on_mnist():
 
 
 @experiment
-def fl_simulation_on_mnist():
+def nonprivate_fl_on_mnist():
   args = ExperimentConfig()
-  args.name = "FL Simulation on MNIST"
+  args.name = "Non-Private on MNIST"
+  args.num_rounds = 10
+  args.epochs = 5
+  args.stage1 = False
+  args.stage2 = False
+  args.stage3 = False
+  args.stage4 = False
+  args.num_clients = 10
+  args.alpha = 10
   model_cls = MnistCNNNet
 
-  use_cuda = not args.no_cuda and torch.cuda.is_available()
-  device = torch.device("cuda" if use_cuda else "cpu")
+  _train_fl_and_attack(args, model_cls, 'mnist')
 
-  train_dataset, test_dataset = get_dataset('mnist', False)
-  args.experiment_id = _get_next_available_dir('out/lightning_logs', 'experiment', False, False)
 
-  args.save_model_path = _get_next_available_dir('out/', 'checkpoints', True, True)
-  fl_simulator = FLEnvironment(model_class=model_cls,
-                               train_dataset=train_dataset,
-                               test_dataset=test_dataset,
-                               num_clients=args.num_clients,
-                               aggregator_class=Aggregator,
-                               rounds=args.num_rounds,
-                               device=device,
-                               client_optimizer_class=torch.optim.SGD,
-                               clients_per_round=args.clients_per_round,
-                               client_local_test_split=args.client_local_test_split,
-                               partition_method=args.partition_method,
-                               alpha=args.alpha,
-                               args=args)
+@experiment
+def msdpfl_on_mnist():
+  args = ExperimentConfig()
+  args.name = "MSDPFL on CIFAR10"
+  args.num_rounds = 10
+  args.epochs = 5
+  args.eps1 = 10
+  args.noise_multiplier = 0.7
+  args.max_grad_norm = 6
+  args.eps3 = 10
+  args.max_weight_norm = 20
+  args.max_weight_norm_aggregated = 20
+  args.num_clients = 10
+  args.alpha = 10
 
-  model = fl_simulator.get_model()
+  model_cls = MnistCNNNet
 
-  attack_model(args, device, 'mnist', model_cls, model, logger=fl_simulator.logger, include_val_split=False)
+  _train_fl_and_attack(args, model_cls, 'mnist')
 
+
+@experiment
+def fl_opacus_on_mnist():
+  args = ExperimentConfig()
+  args.name = "FL Opacus on MNIST"
+  args.num_rounds = 10
+  args.epochs = 5
+  args.stage1 = False
+  args.stage2 = True
+  args.stage3 = False
+  args.stage4 = False
+  args.noise_multiplier = 1.1
+  args.max_grad_norm = 5
+  args.num_clients = 10
+  args.alpha = 10
+  model_cls = MnistCNNNet
+
+  _train_fl_and_attack(args, model_cls, 'mnist')
+
+@experiment
+def msdpfl_on_cifar_client_variation():
+  args = ExperimentConfig()
+  args.name = f"MSDPFL on CIFAR with client variation"
+  args.num_rounds = 10
+  args.epochs = 15
+  args.eps1 = 10
+  args.noise_multiplier = 0.5
+  args.max_grad_norm = 6
+  args.eps3 = 20
+  args.max_weight_norm = 20
+  args.max_weight_norm_aggregated = 20
+  args.alpha = 25
+  model_cls = Cifar10Net
+
+  clients_range = [5, 10, 20, 30, 50, 75, 100]
+
+  ranges = {'num_clients': clients_range}
+
+  for name, rng in ranges.items():
+    print('=' * 80)
+    test_acc = []
+    mea_fid = []
+    mia_acc = []
+    for value in rng:
+      args.set_value(name, value)
+
+      model, attack_results = _train_fl_and_attack(args, model_cls, 'mnist')
+      test_acc.append(model.test_accuracy)
+      mea_fid.append(attack_results['MEA']['fidelity'])
+      mia_acc.append(attack_results['MIA']['accuracy'])
+
+    with open(f'./{name}.npy', 'wb') as f:
+      np.save(f, np.array(rng))
+      np.save(f, np.array(test_acc))
+      np.save(f, np.array(mea_fid))
+      np.save(f, np.array(mia_acc))
 
 def run_experiments():
   experiments = [
-    nonprivate_fl_on_cifar10,
-    msdpfl_on_cifar10,
-    fl_opacus_on_cifar10
+    msdpfl_on_cifar_client_variation
+    # nonprivate_fl_on_mnist,
+    # msdpfl_on_mnist,
+    # fl_opacus_on_mnist
   ]
 
   for exp in experiments:
@@ -544,19 +611,42 @@ def _plot(data_dict, x_label, y_label, title):
   else:
     x_values = None
 
+  max_x_range_len = 0
   for name, data in data_dict.items():
     if x_values:
       ax.plot(list(range(len(x_values))), data, label=name)
     else:
-      ax.plot(data, label=name)
+      ax.plot(list(range(len(data))), data, label=name)
+      max_x_range_len = max(max_x_range_len, len(data))
 
   if x_values:
     plt.xticks(list(range(len(x_values))), x_values)
+  else:
+    ticks = list(range(max_x_range_len))
+    values = list(range(1, max_x_range_len + 1))
+    plt.xticks(ticks, values)
   ax.legend()
   plt.xlabel(x_label)
   plt.ylabel(y_label)
   plt.title(title)
   plt.show()
+
+
+def load_and_plot_privacy_param_variation():
+  eps1 = {'name': 'eps_1', 'fp': './eps1.npy'}
+  noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy'}
+  eps3 = {'name': 'eps_3', 'fp': './eps3.npy'}
+
+  files = [eps1, noise_multiplier, eps3]
+  curve_names = ['Test accuracy', 'MEA fidelity', 'MIA accuracy']
+
+  for data_file in files:
+    data = dict()
+    with open(data_file['fp'], 'rb') as f:
+      data['x_ticks'] = np.load(f)
+      for curve in curve_names:
+        data[curve] = np.load(f)
+    _plot(data, data_file['name'], 'Privacy and Utility', 'Small CNN on Cifar10')
 
 
 def load_and_plot_learning_curves():
@@ -566,17 +656,12 @@ def load_and_plot_learning_curves():
       metric_data[f['name']] = f[metric_name]
     return metric_data
 
-  metrics = ['train_loss', 'train_acc', 'val_acc']
+  metrics = ['val_acc']  # ,'train_loss', 'train_acc', 'val_acc']
 
-  msdp = {'name': 'MSDP', 'fp': "out/MNIST/cnn/checkpoints_2/MSDPTrainer_0_plot_stats.npy"}
-  opacus = {'name': 'Opacus', 'fp': "out/MNIST/cnn/opacus_training/opacus_training_stats.npy"}
-  non_private = {'name': 'Non-Private', 'fp': "out/MNIST/cnn/checkpoints_4/MSDPTrainer_0_plot_stats.npy"}
-  title = 'CNN on MNIST'
-
-  # msdp = {'name': 'MSDP', 'fp': "out/0_slurm_1/checkpoints_2/MSDPTrainer_0_plot_stats.npy"}
-  # non_private = {'name': 'Non-Private', 'fp': "out/0_slurm_1/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
-  # opacus = {'name': 'Opacus', 'fp': "out/0_slurm_1/opacus_training/opacus_training_stats.npy"}
-  # title = 'ResNet-18 on CIFAR10'
+  msdp = {'name': 'MSDP', 'fp': "out/MNIST/checkpoints_2/stats.npy"}
+  opacus = {'name': 'Opacus', 'fp': "out/MNIST/checkpoints_4/stats.npy"}
+  non_private = {'name': 'Non-Private', 'fp': "out/MNIST/checkpoints_1/stats.npy"}
+  title = 'FL on MNIST'
 
   files = [msdp, opacus, non_private]
 
@@ -585,31 +670,13 @@ def load_and_plot_learning_curves():
     with open(data_file['fp'], 'rb') as f:
       for metric in metrics:
         data[metric] = np.load(f)
-        if metric in ['train_acc', 'val_acc'] and data_file['name'] != 'Opacus':
-          data[metric] = data[metric][1:]
+        # if metric in ['train_acc', 'val_acc'] and data_file['name'] != 'Opacus':
+        #   data[metric] = data[metric][1:]
     data_file.update(**data)
 
   for metric in metrics:
     metric_data = fetch(files, metric)
-    _plot(metric_data, 'Epochs', metric, title)
-
-
-def load_and_plot_privacy_param_variation():
-  eps1 = {'name': 'eps_1', 'fp': './eps1.npy', 'range': [0.5, 2, 4, 8, 10, 15, 20]}
-  noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy', 'range': [0.1, 0.3, 0.5, 0.7, 0.8, 1]}
-  eps3 = {'name': 'eps_3', 'fp': './eps3.npy', 'range': [0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]}
-
-  files = [eps1, noise_multiplier, eps3]
-  curve_names = ['Test accuracy', 'MEA fidelity', 'MIA accuracy']
-
-  for data_file in files:
-    data = dict()
-    with open(data_file['fp'], 'rb') as f:
-      #  data['x_ticks'] = np.load(f)
-      for curve in curve_names:
-        data[curve] = np.load(f)
-    data['x_ticks'] = data_file['range']
-    _plot(data, data_file['name'], 'Privacy and Utility', 'Small CNN on Cifar10')
+    _plot(metric_data, 'Rounds', metric, title)
 
 
 if __name__ == '__main__':
