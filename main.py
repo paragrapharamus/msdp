@@ -523,6 +523,7 @@ def fl_opacus_on_mnist():
 
   _train_fl_and_attack(args, model_cls, 'mnist')
 
+
 @experiment
 def msdpfl_on_cifar_client_variation():
   args = ExperimentConfig()
@@ -550,7 +551,7 @@ def msdpfl_on_cifar_client_variation():
     for value in rng:
       args.set_value(name, value)
 
-      model, attack_results = _train_fl_and_attack(args, model_cls, 'mnist')
+      model, attack_results = _train_fl_and_attack(args, model_cls, 'cifar10')
       test_acc.append(model.test_accuracy)
       mea_fid.append(attack_results['MEA']['fidelity'])
       mia_acc.append(attack_results['MIA']['accuracy'])
@@ -560,6 +561,7 @@ def msdpfl_on_cifar_client_variation():
       np.save(f, np.array(test_acc))
       np.save(f, np.array(mea_fid))
       np.save(f, np.array(mia_acc))
+
 
 def run_experiments():
   experiments = [
