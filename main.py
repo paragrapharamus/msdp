@@ -17,7 +17,7 @@ from dp_stages import Stages
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
 from log import Logger
-from models import Cifar10Net, MnistCNNNet, MnistFCNet
+from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR
 from msdp import MSPDTrainer
 
 
@@ -133,7 +133,7 @@ def _train_msdp_and_attack(args, model_cls, dataset_name):
                         save_checkpoint=True
                         )
 
-  trainer.logger.log(args)
+  trainer.logger.log(str(args))
 
   if args.stage1:
     trainer.attach_stage(Stages.STAGE_1,
@@ -444,9 +444,9 @@ def opacus_training_on_mnist():
   args = ExperimentConfig()
   args.name = "Opacus training on MNIST"
   args.batch_size = 256
-  args.epochs = 15
-  args.noise_multiplier = 0.8
-  args.max_grad_norm = 6
+  args.epochs = 6
+  args.noise_multiplier = 1
+  args.max_grad_norm = 5
   args.lr = 0.02
   args.gamma = 0.7
   args.weight_decay = 5e-4
@@ -454,7 +454,7 @@ def opacus_training_on_mnist():
   args.stage1 = False
   args.stage2 = False  # using the opacus library here
   args.stage3 = False
-  model_cls = MnistFCNet
+  model_cls = MnistCNNNet
 
   print(args)
 
@@ -536,7 +536,7 @@ def msdpfl_on_cifar_client_variation():
   args.eps3 = 20
   args.max_weight_norm = 20
   args.max_weight_norm_aggregated = 20
-  args.alpha = 25
+  args.alpha = 50
   model_cls = Cifar10Net
 
   clients_range = [5, 10, 20, 30, 50, 75, 100]
@@ -563,12 +563,48 @@ def msdpfl_on_cifar_client_variation():
       np.save(f, np.array(mia_acc))
 
 
+@experiment
+def non_private_training_on_dr():
+  args = ExperimentConfig()
+  args.name = "Non private training on DR"
+  args.stage1 = False
+  args.stage2 = False
+  args.stage3 = False
+  args.stage4 = False
+  args.batch_size = 128
+  args.epochs = 25
+  args.lr = 0.002
+  model_cls = SqueezeNetDR
+
+  _train_msdp_and_attack(args, model_cls, 'dr')
+
+@experiment
+def msdp_training_on_dr():
+  args = ExperimentConfig()
+  args.name = f"MSDP on DR, Stage1={args.stage1}, Stage2={args.stage2}, Stage3={args.stage3}"
+  args.eps1 = 10
+  args.noise_multiplier = 0.35
+  args.max_grad_norm = 4.5
+  args.virtual_batches = 1
+  args.eps3 = 1
+  args.max_weight_norm = 18
+  args.batch_size = 128
+  args.test_batch_size = 256
+  args.epochs = 20
+  args.lr = 0.02
+  args.gamma = 0.7
+  args.weight_decay = 5e-4
+  args.momentum = 0.9
+  args.lr = 0.002
+  model_cls = Cifar10Net
+
+  _train_msdp_and_attack(args, model_cls, 'cifar10')
+
+
 def run_experiments():
   experiments = [
-    msdpfl_on_cifar_client_variation
-    # nonprivate_fl_on_mnist,
-    # msdpfl_on_mnist,
-    # fl_opacus_on_mnist
+    non_private_training_on_dr,
+    # msdp_training_on_dr
   ]
 
   for exp in experiments:
@@ -598,11 +634,12 @@ def attack_test():
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
-  args.membership_inference = False
-  args.model_extraction = True
+  args.membership_inference = True
+  args.model_extraction = False
   # args.knockoffnet_extraction = True
 
-  attack_model(args, device, 'mnist', architecture=model_cls, checkpoint_path='out/opacus_training/opacus_model.pth')
+  attack_model(args, device, 'mnist', architecture=model_cls,
+               checkpoint_path='out_centralMSDP/MNIST/cnn/opacus_training/final.ckpt')
 
 
 def _plot(data_dict, x_label, y_label, title):
@@ -615,13 +652,13 @@ def _plot(data_dict, x_label, y_label, title):
 
   max_x_range_len = 0
   for name, data in data_dict.items():
-    if x_values:
+    if x_values is not None:
       ax.plot(list(range(len(x_values))), data, label=name)
     else:
       ax.plot(list(range(len(data))), data, label=name)
       max_x_range_len = max(max_x_range_len, len(data))
 
-  if x_values:
+  if x_values is not None:
     plt.xticks(list(range(len(x_values))), x_values)
   else:
     ticks = list(range(max_x_range_len))
@@ -635,11 +672,14 @@ def _plot(data_dict, x_label, y_label, title):
 
 
 def load_and_plot_privacy_param_variation():
-  eps1 = {'name': 'eps_1', 'fp': './eps1.npy'}
-  noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy'}
-  eps3 = {'name': 'eps_3', 'fp': './eps3.npy'}
+  # eps1 = {'name': 'eps_1', 'fp': './eps1.npy'}
+  # noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy'}
+  # eps3 = {'name': 'eps_3', 'fp': './eps3.npy'}
+  #
+  # files = [eps1, noise_multiplier, eps3]
 
-  files = [eps1, noise_multiplier, eps3]
+  num_c = {'name': 'num_clients', 'fp': './num_clients.npy'}
+  files = [num_c]
   curve_names = ['Test accuracy', 'MEA fidelity', 'MIA accuracy']
 
   for data_file in files:
@@ -660,10 +700,15 @@ def load_and_plot_learning_curves():
 
   metrics = ['val_acc']  # ,'train_loss', 'train_acc', 'val_acc']
 
-  msdp = {'name': 'MSDP', 'fp': "out/MNIST/checkpoints_2/stats.npy"}
-  opacus = {'name': 'Opacus', 'fp': "out/MNIST/checkpoints_4/stats.npy"}
-  non_private = {'name': 'Non-Private', 'fp': "out/MNIST/checkpoints_1/stats.npy"}
-  title = 'FL on MNIST'
+  # msdp = {'name': 'MSDPFL', 'fp': "out/MNIST/checkpoints_2/stats.npy"}
+  # opacus = {'name': 'Opacus FL', 'fp': "out/MNIST/checkpoints_4/stats.npy"}
+  # non_private = {'name': 'Non-Private FL', 'fp': "out/MNIST/checkpoints_1/stats.npy"}
+  # title = 'FL on MNIST'
+
+  msdp = {'name': 'MSDPFL', 'fp': "out/CIFAR10/checkpoints_3/stats.npy"}
+  opacus = {'name': 'Opacus FL', 'fp': "out/CIFAR10/checkpoints_1/stats.npy"}
+  non_private = {'name': 'Non-Private FL', 'fp': "out/CIFAR10/checkpoints_5/stats.npy"}
+  title = 'FL on CIFAR-10'
 
   files = [msdp, opacus, non_private]
 
@@ -684,6 +729,6 @@ def load_and_plot_learning_curves():
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
   # load_and_plot_privacy_param_variation()
-  # load_and_plot_learning_curves()
+  # # load_and_plot_learning_curves()
   run_experiments()
   # attack_test()

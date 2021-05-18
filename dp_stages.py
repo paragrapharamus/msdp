@@ -21,7 +21,7 @@ class Stages(Enum):
       * eps: float
           Quantifies the degree of privacy added during this stage, 
           hence the amount of noise which will be injected into data.
-      * max_grad_norm: Optional[Union[float, List[float]]]
+      * max_grad_norm: Union[float, List[float]]
           The maximum L2 norm to which the gradients will be clipped.
           Could be a single real value, to which all gradients will be
           clipped or a list of maximum norms per layer. 
@@ -99,7 +99,7 @@ class Stage1(DPStage):
           Quantifies the degree of privacy added during this stage,
           hence the amount of noise which will be injected into data.
 
-    :param max_grad_norm: Optional[Union[float, List[float]]]
+    :param max_grad_norm: Union[float, List[float]]
           The maximum L2 norm to which the gradients will be clipped.
           Could be a single real value, to which all gradients will be
           clipped or a list of maximum norms per layer.
@@ -108,7 +108,7 @@ class Stage1(DPStage):
 
   def __init__(self,
                eps: float,
-               max_grad_norm: Optional[Union[float, List[float]]] = None):
+               max_grad_norm: Union[float, List[float]]):
 
     super(Stage1, self).__init__('STAGE_1')
     self.eps = eps
@@ -116,43 +116,33 @@ class Stage1(DPStage):
     if max_grad_norm and isinstance(max_grad_norm, list):
       self.max_grad_norm = np.array(max_grad_norm).mean()
 
-  def apply(self, data_loader: DataLoader, epochs: Optional[int] = 1) -> DataLoader:
-    dataset = torch.tensor(data_loader.dataset.data).float()
+  def apply(self, data_loader: DataLoader, epochs: Optional[int] = 1) -> bool:
+    dataset = data_loader.dataset.data
+    data_loader.stage_1_attached = True  # prevents double noise injection
 
-    noised_data = self._perturb_dataset(dataset, epochs) if self.max_grad_norm \
-      else self._perturb_dataset_with_sensitivity(dataset)
+    if isinstance(dataset[0], str):
+      # Lazy loading of data. The noise injection should be done
+      # after the batches have been sampled during training
+      return False
 
-    dataset = noised_data.numpy()
+    dataset = torch.tensor(dataset).float()
+    dataset = self.perturb_data(dataset, epochs, len(dataset))
     dataset = (dataset - dataset.min()) / (dataset.max() - dataset.min()) * 255
-    data_loader.dataset.data = dataset.astype(np.uint8)
-    data_loader.stage_1_attached = True
-    return data_loader
+    data_loader.dataset.data = dataset.numpy().astype(np.uint8)
+    return True
 
-  def _perturb_dataset(self, dataset: torch.Tensor, epochs: int) -> torch.Tensor:
+  def perturb_data(self, data: torch.Tensor, epochs: int, dataset_len: int) -> torch.Tensor:
     """
       Based on -> https://arxiv.org/abs/2002.08570
     """
-    n = len(dataset)
-    delta = 1 / (2 * len(dataset))
+    n = dataset_len
+    delta = 1 / (2 * n)
     std = self.max_grad_norm * np.sqrt(epochs * np.log(1 / delta) / n * (n - 1)) / self.eps
-    self.log(f"Input perturbation: std={std:.2e}, ({self.eps}, {delta})-DP")
-    noise = torch.normal(0, std, size=dataset.shape)
-    dataset += noise
-    return dataset
-
-  def _perturb_dataset_with_sensitivity(self, dataset: torch.Tensor) -> torch.Tensor:
-    """
-    Based on -> https://www.cis.upenn.edu/~aaroth/Papers/privacybook.pdf
-             -> http://www.cs.cmu.edu/~anupamd/paper/NDSS2016.pdf
-    """
-    delta = 1 / (1.5 * len(dataset))
-    sensitivity = self._get_sensitivity(dataset)
-    eps = 25 * self.eps
-    std = sensitivity * np.sqrt(2 * np.log(1.25 / delta)) / eps
-    self.log(f"Input perturbation: ({eps:.2f}, {delta:.2e})-DP with std={std:.2e}")
-    noise = torch.normal(0, std, size=dataset.shape)
-    dataset += noise
-    return dataset
+    if len(data) == dataset_len:
+      self.log(f"Input perturbation: std={std:.2e}, ({self.eps}, {delta})-DP")
+    noise = torch.normal(0, std, size=data.shape, device=data.device)
+    data += noise
+    return data
 
   def _get_sensitivity(self, dataset: torch.Tensor) -> torch.Tensor:
     """

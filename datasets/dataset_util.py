@@ -1,9 +1,12 @@
+import os
 from copy import deepcopy
 from typing import Optional, Union, Tuple, Any
 
 import numpy as np
+import pandas as pd
 import torch
 from PIL import Image
+from matplotlib import image as mpimg
 from torch.utils.data import DataLoader, sampler, Dataset
 from torchvision import datasets
 from torchvision import transforms
@@ -88,12 +91,54 @@ class MNISTDataset(datasets.MNIST):
     return img, target
 
 
+class DRDataset(Dataset):
+  transform_trainval = transforms.Compose([
+    transforms.Resize(265),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+  ])
+  transform_test = transform_trainval
+
+  input_shape = (1, 3, 224, 224)
+  num_classes = 4
+  name = 'dr'
+
+  def __init__(self, data_dir, train=True, **kwargs):
+    super(DRDataset, self).__init__()
+    data_dir = os.path.join(data_dir, 'diabetic_retinopathy')
+    self.image_dir = os.path.join(data_dir, 'images/')
+    self.train = train
+    if train:
+      _df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
+    else:
+      _df = pd.read_csv(os.path.join(data_dir, 'test.csv'))
+
+    self.data = np.array(list(map(lambda id: id + '.png', _df.id_code[:])))
+    self.targets = np.array(_df.diagnosis)
+
+    self.transform = DRDataset.transform_trainval
+
+  def __len__(self):
+    return len(self.data)
+
+  def __getitem__(self, index):
+    img_name = self.data[index]
+    label = int(self.targets[index])
+    img_path = os.path.join(self.image_dir, img_name)
+    image = Image.open(img_path)
+    # image = (image + 1) * 127.5
+    if self.transform is not None:
+      image = self.transform(image)
+    return image.numpy(), label
+
+
 def load_dataset(dataset_name, args):
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   train_kwargs = {"batch_size": args.batch_size}
   test_kwargs = {"batch_size": args.test_batch_size}
   if use_cuda:
-    cuda_kwargs = {"num_workers": 1, "pin_memory": True}
+    cuda_kwargs = {"num_workers": 2, "pin_memory": True}
     train_kwargs.update(cuda_kwargs)
     test_kwargs.update(cuda_kwargs)
     print('GPU: ' + str(torch.cuda.get_device_name(0)))
@@ -104,6 +149,8 @@ def load_dataset(dataset_name, args):
     return load_cifar10(train_kwargs, test_kwargs)
   elif dataset_name == 'mnist':
     return load_mnist(train_kwargs, test_kwargs)
+  elif dataset_name == 'dr':
+    return load_dr(train_kwargs, test_kwargs)
   else:
     raise NotImplementedError('Unsupported dataset')
 
@@ -127,11 +174,18 @@ def load_mnist(train_kwargs, test_kwargs):
   return _load(train_dataset, valid_dataset, test_dataset, train_kwargs, test_kwargs)
 
 
+def load_dr(train_kwargs, test_kwargs):
+  train_dataset, valid_dataset, test_dataset = get_dr_dataset(validation_dataset=True)
+  return _load(train_dataset, valid_dataset, test_dataset, train_kwargs, test_kwargs)
+
+
 def get_dataset(dataset_name, validation_dataset=True):
   if dataset_name == 'cifar10':
     return get_cifar10_dataset(validation_dataset=validation_dataset)
   elif dataset_name == 'mnist':
     return get_mnist_dataset(validation_dataset=validation_dataset)
+  elif dataset_name == 'dr':
+    return get_dr_dataset(validation_dataset=validation_dataset)
   else:
     raise NotImplementedError('Unsupported dataset')
 
@@ -152,6 +206,10 @@ def get_cifar10_dataset(validation_dataset=True):
 
 def get_mnist_dataset(validation_dataset=True):
   return _get_dataset(MNISTDataset, validation_dataset)
+
+
+def get_dr_dataset(validation_dataset=True):
+  return _get_dataset(DRDataset, validation_dataset)
 
 
 def truncate_dataset(ds: Dataset, idxs: np.ndarray):

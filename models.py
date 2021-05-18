@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from opacus.utils.module_modification import convert_batchnorm_modules
-from torchvision.models import resnet18
+from torchvision.models import resnet18, squeezenet1_1
 
 
 class MSDPBase(pl.LightningModule):
@@ -17,6 +17,7 @@ class MSDPBase(pl.LightningModule):
     self.test_acc = pl.metrics.Accuracy()
 
     self.personal_log_fn = None
+    self.batch_processing_hook = None
 
     self.training_losses = []
     self.training_accuracies = []
@@ -34,6 +35,8 @@ class MSDPBase(pl.LightningModule):
     opt = self.optimizers()
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
+    if self.batch_processing_hook:
+      self.batch_processing_hook(data)
     output = self(data)
     loss = self.compute_loss(output, targets)
     self.manual_backward(loss, opt)
@@ -131,7 +134,15 @@ class Cifar10Net(MSDPBase):
       # nn.LogSoftmax(dim=1)
     )
 
-    # self.module = convert_batchnorm_modules(resnet18(num_classes=NUM_CLASSES))
+  def forward(self, x):
+    return self.module(x).view(-1, self._NUM_CLASSES)
+
+
+class Cifar10ResNet(MSDPBase):
+  def __init__(self, *args):
+    super(Cifar10ResNet, self).__init__(args)
+    self._NUM_CLASSES = 10
+    self.module = convert_batchnorm_modules(resnet18(num_classes=self._NUM_CLASSES))
 
   def forward(self, x):
     return self.module(x).view(-1, self._NUM_CLASSES)
@@ -175,6 +186,19 @@ class MnistFCNet(MSDPBase):
 
   def forward(self, x):
     return self.module(x.view(-1, 28 * 28)).view(-1, self._NUM_CLASSES)
+
+
+class SqueezeNetDR(MSDPBase):
+  def __init__(self, *args):
+    super(SqueezeNetDR, self).__init__(args)
+    self._NUM_CLASSES = 5
+    self.module = squeezenet1_1(pretrained=True)
+    self.module.classifier[1] = nn.Conv2d(512, 5, kernel_size=(1, 1), stride=(1, 1))
+    self.module.num_classes = self._NUM_CLASSES
+    self.module = convert_batchnorm_modules(self.module)
+
+  def forward(self, x):
+    return self.module(x).view(-1, self._NUM_CLASSES)
 
 
 class AttackModel(nn.Module):

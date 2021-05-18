@@ -160,7 +160,8 @@ class MSPDTrainer:
 
     # Inject noise to data
     if Stages.STAGE_1 in self.stages and not hasattr(self.train_loader, 'stage_1_attached'):
-      self._stage_1_noise([self.train_loader])
+      applied = self.stages[Stages.STAGE_1].apply(self.train_loader, self.epochs)
+      self.model.batch_processing_hook = self._stage_1_on_batch
 
     # Wrap the optimizer to perform DP training
     if Stages.STAGE_2 in self.stages:
@@ -261,9 +262,9 @@ class MSPDTrainer:
       return checkpoint_dir if absolute_path \
         else f"{dir_name}_{dir_id}"
 
-  def _stage_1_noise(self, loaders):
-    for i, loader in enumerate(loaders):
-      self.stages[Stages.STAGE_1].apply(loader, self.epochs)
+  def _stage_1_on_batch(self, data: torch.Tensor):
+    # individual batch perturbation
+    self.stages[Stages.STAGE_1].perturb_data(data, self.epochs, len(self.train_loader.dataset))
 
   def _stage_3_noise(self):
     self.stages[Stages.STAGE_3].apply(self.model, len(self.train_loader.dataset))

@@ -5,7 +5,7 @@ from datetime import datetime
 class Logger:
   STD_files = [sys.stdout, sys.stderr]
 
-  def __init__(self, log_files, max_buffer_size=1156):
+  def __init__(self, log_files, max_buffer_size=0):
     self.log_files = []
     for file in log_files:
       if isinstance(file, str):
