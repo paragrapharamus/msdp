@@ -62,7 +62,14 @@ class MSPDTrainer:
         save_top_k=1,
         mode='max',
       )
-      self.trainer_callbacks = [checkpoint_callback]
+    else:
+      checkpoint_callback = ModelCheckpoint(
+        monitor='valid_acc_epoch',
+        filename='checkpoint-{epoch:02d}-{valid_acc:.2f}',
+        save_top_k=0,
+        mode='max',
+      )
+    self.trainer_callbacks = [checkpoint_callback]
 
     # Lazy init during training. Also, a new trainer instance must be created
     # before each FL round, in case the this model is used during a FL simulation
@@ -161,7 +168,8 @@ class MSPDTrainer:
     # Inject noise to data
     if Stages.STAGE_1 in self.stages and not hasattr(self.train_loader, 'stage_1_attached'):
       applied = self.stages[Stages.STAGE_1].apply(self.train_loader, self.epochs)
-      self.model.batch_processing_hook = self._stage_1_on_batch
+      if not applied:
+        self.model.batch_processing_hook = self._stage_1_on_batch
 
     # Wrap the optimizer to perform DP training
     if Stages.STAGE_2 in self.stages:

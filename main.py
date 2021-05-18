@@ -571,15 +571,16 @@ def non_private_training_on_dr():
   args.stage2 = False
   args.stage3 = False
   args.stage4 = False
-  args.batch_size = 128
-  args.test_batch_size = 256
-  args.epochs = 20
+  args.batch_size = 500
+  args.test_batch_size = 500
+  args.epochs = 60
   args.lr = 0.002
-  args.membership_inference=False
-  args.model_extraction=False
+  args.membership_inference = False
+  args.model_extraction = False
   model_cls = SqueezeNetDR
 
   _train_msdp_and_attack(args, model_cls, 'dr')
+
 
 @experiment
 def msdp_training_on_dr():
@@ -599,17 +600,66 @@ def msdp_training_on_dr():
   args.weight_decay = 5e-4
   args.momentum = 0.9
   args.lr = 0.002
-  args.membership_inference=False
-  args.model_extraction=False
+  args.membership_inference = False
+  args.model_extraction = False
   model_cls = SqueezeNetDR
 
   _train_msdp_and_attack(args, model_cls, 'dr')
 
 
+@experiment
+def nonprivate_fl_on_dr():
+  args = ExperimentConfig()
+  args.name = "Non-Private FL on DR"
+  args.num_rounds = 60
+  args.epochs = 1
+  args.batch_size = 64
+  args.test_batch_size = 64
+  args.lr = 0.002
+  args.num_clients = 10
+  args.partition_method = 'homogeneous'
+  args.clients_per_round = 5
+  args.stage1 = False
+  args.stage2 = False
+  args.stage3 = False
+  args.stage4 = False
+  args.membership_inference = False
+  args.model_extraction = False
+  model_cls = SqueezeNetDR
+
+  _train_fl_and_attack(args, model_cls, 'dr')
+
+@experiment
+def msdpfl_on_dr():
+  args = ExperimentConfig()
+  args.name = "MSDPFL on DR"
+  args.num_rounds = 25
+  args.epochs = 1
+  args.batch_size = 64
+  args.lr = 0.002
+  args.stage1 = True
+  args.stage2 = True
+  args.stage3 = True
+  args.stage4 = True
+  args.eps1 = 10
+  args.noise_multiplier = 0.6
+  args.max_grad_norm = 4
+  args.eps3 = 3
+  args.max_weight_norm = 15
+  args.num_clients = 10
+  args.partition_method = 'homogeneous'
+  args.clients_per_round = 5
+  args.membership_inference = False
+  args.model_extraction = False
+  model_cls = SqueezeNetDR
+
+  _train_fl_and_attack(args, model_cls, 'dr')
+
+
 def run_experiments():
   experiments = [
-    # non_private_training_on_dr,
-    msdp_training_on_dr
+    non_private_training_on_dr,
+    # nonprivate_fl_on_dr
   ]
 
   for exp in experiments:
@@ -703,7 +753,7 @@ def load_and_plot_learning_curves():
       metric_data[f['name']] = f[metric_name]
     return metric_data
 
-  metrics = ['val_acc']  # ,'train_loss', 'train_acc', 'val_acc']
+  metrics = ['train_loss', 'train_acc', 'val_acc']
 
   # msdp = {'name': 'MSDPFL', 'fp': "out/MNIST/checkpoints_2/stats.npy"}
   # opacus = {'name': 'Opacus FL', 'fp': "out/MNIST/checkpoints_4/stats.npy"}
@@ -712,10 +762,10 @@ def load_and_plot_learning_curves():
 
   msdp = {'name': 'MSDPFL', 'fp': "out/CIFAR10/checkpoints_3/stats.npy"}
   opacus = {'name': 'Opacus FL', 'fp': "out/CIFAR10/checkpoints_1/stats.npy"}
-  non_private = {'name': 'Non-Private FL', 'fp': "out/CIFAR10/checkpoints_5/stats.npy"}
+  non_private = {'name': 'Non-Private FL', 'fp': "out_centralMSDP/DR/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
   title = 'FL on CIFAR-10'
 
-  files = [msdp, opacus, non_private]
+  files = [non_private]
 
   for data_file in files:
     data = dict()
@@ -734,6 +784,6 @@ def load_and_plot_learning_curves():
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
   # load_and_plot_privacy_param_variation()
-  # # load_and_plot_learning_curves()
+  # load_and_plot_learning_curves()
   run_experiments()
   # attack_test()

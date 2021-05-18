@@ -35,7 +35,7 @@ class MSDPBase(pl.LightningModule):
     opt = self.optimizers()
     data, targets = batch
     data, targets = data.to(self.device), targets.to(self.device)
-    if self.batch_processing_hook:
+    if self.batch_processing_hook is not None:
       self.batch_processing_hook(data)
     output = self(data)
     loss = self.compute_loss(output, targets)

@@ -116,7 +116,7 @@ class DRDataset(Dataset):
 
     self.data = np.array(list(map(lambda id: id + '.png', _df.id_code[:])))
     self.targets = np.array(_df.diagnosis)
-
+    self.classes = ['No DR', 'Mild DR', 'Moderate DR', 'Severe  DR', 'Proliferative  DR']
     self.transform = DRDataset.transform_trainval
 
   def __len__(self):
