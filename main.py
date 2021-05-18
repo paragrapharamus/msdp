@@ -571,8 +571,8 @@ def non_private_training_on_dr():
   args.stage2 = False
   args.stage3 = False
   args.stage4 = False
-  args.batch_size = 500
-  args.test_batch_size = 500
+  args.batch_size = 256
+  args.test_batch_size = 256
   args.epochs = 60
   args.lr = 0.002
   args.membership_inference = False
@@ -612,9 +612,9 @@ def nonprivate_fl_on_dr():
   args = ExperimentConfig()
   args.name = "Non-Private FL on DR"
   args.num_rounds = 60
-  args.epochs = 1
-  args.batch_size = 64
-  args.test_batch_size = 64
+  args.epochs = 2
+  args.batch_size = 256
+  args.test_batch_size = 256
   args.lr = 0.002
   args.num_clients = 10
   args.partition_method = 'homogeneous'
