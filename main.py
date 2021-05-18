@@ -585,14 +585,14 @@ def non_private_training_on_dr():
 def msdp_training_on_dr():
   args = ExperimentConfig()
   args.name = f"MSDP on DR"
-  args.eps1 = 10
+  args.eps1 = 8
   args.noise_multiplier = 0.35
   args.max_grad_norm = 4.5
   args.virtual_batches = 1
   args.eps3 = 1
   args.max_weight_norm = 18
-  args.batch_size = 128
-  args.test_batch_size = 256
+  args.batch_size = 500
+  args.test_batch_size = 500
   args.epochs = 20
   args.lr = 0.002
   args.gamma = 0.7
@@ -608,8 +608,8 @@ def msdp_training_on_dr():
 
 def run_experiments():
   experiments = [
-    non_private_training_on_dr,
-    # msdp_training_on_dr
+    # non_private_training_on_dr,
+    msdp_training_on_dr
   ]
 
   for exp in experiments:
