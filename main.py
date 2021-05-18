@@ -572,8 +572,11 @@ def non_private_training_on_dr():
   args.stage3 = False
   args.stage4 = False
   args.batch_size = 128
-  args.epochs = 25
+  args.test_batch_size = 256
+  args.epochs = 20
   args.lr = 0.002
+  args.membership_inference=False
+  args.model_extraction=False
   model_cls = SqueezeNetDR
 
   _train_msdp_and_attack(args, model_cls, 'dr')
@@ -581,7 +584,7 @@ def non_private_training_on_dr():
 @experiment
 def msdp_training_on_dr():
   args = ExperimentConfig()
-  args.name = f"MSDP on DR, Stage1={args.stage1}, Stage2={args.stage2}, Stage3={args.stage3}"
+  args.name = f"MSDP on DR"
   args.eps1 = 10
   args.noise_multiplier = 0.35
   args.max_grad_norm = 4.5
@@ -591,14 +594,16 @@ def msdp_training_on_dr():
   args.batch_size = 128
   args.test_batch_size = 256
   args.epochs = 20
-  args.lr = 0.02
+  args.lr = 0.002
   args.gamma = 0.7
   args.weight_decay = 5e-4
   args.momentum = 0.9
   args.lr = 0.002
-  model_cls = Cifar10Net
+  args.membership_inference=False
+  args.model_extraction=False
+  model_cls = SqueezeNetDR
 
-  _train_msdp_and_attack(args, model_cls, 'cifar10')
+  _train_msdp_and_attack(args, model_cls, 'dr')
 
 
 def run_experiments():
