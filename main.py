@@ -129,6 +129,7 @@ def _train_msdp_and_attack(args, model_cls, dataset_name):
                         data_loaders=dataloaders,
                         epochs=args.epochs,
                         batch_size=args.batch_size,
+                        virtual_batches=args.virtual_batches,
                         device=device,
                         save_checkpoint=True
                         )
@@ -434,7 +435,7 @@ def msdp_training_on_mnist():
   args.gamma = 0.7
   args.weight_decay = 5e-4
   args.momentum = 0.9
-  model_cls = MnistFCNet
+  model_cls = MnistCNNNet
 
   _train_msdp_and_attack(args, model_cls, 'mnist')
 
@@ -592,8 +593,10 @@ def msdp_training_on_dr():
   args.virtual_batches = 1
   args.eps3 = 1
   args.max_weight_norm = 18
-  args.batch_size = 500
-  args.test_batch_size = 500
+  args.stage2 = False
+  args.stage3 = False
+  args.batch_size = 100
+  args.test_batch_size = 100
   args.epochs = 20
   args.lr = 0.002
   args.gamma = 0.7
@@ -608,7 +611,7 @@ def msdp_training_on_dr():
 
 
 @experiment
-def nonprivate_fl_on_dr():
+def nonprivate_fl_training_on_dr():
   args = ExperimentConfig()
   args.name = "Non-Private FL on DR"
   args.num_rounds = 60
@@ -629,8 +632,9 @@ def nonprivate_fl_on_dr():
 
   _train_fl_and_attack(args, model_cls, 'dr')
 
+
 @experiment
-def msdpfl_on_dr():
+def msdpfl_training_on_dr():
   args = ExperimentConfig()
   args.name = "MSDPFL on DR"
   args.num_rounds = 25
@@ -658,8 +662,8 @@ def msdpfl_on_dr():
 
 def run_experiments():
   experiments = [
-    non_private_training_on_dr,
-    # nonprivate_fl_on_dr
+    # msdp_training_on_mnist,
+    msdp_training_on_dr
   ]
 
   for exp in experiments:
@@ -753,7 +757,7 @@ def load_and_plot_learning_curves():
       metric_data[f['name']] = f[metric_name]
     return metric_data
 
-  metrics = ['train_loss', 'train_acc', 'val_acc']
+  metrics = ['val_acc']
 
   # msdp = {'name': 'MSDPFL', 'fp': "out/MNIST/checkpoints_2/stats.npy"}
   # opacus = {'name': 'Opacus FL', 'fp': "out/MNIST/checkpoints_4/stats.npy"}
@@ -762,10 +766,11 @@ def load_and_plot_learning_curves():
 
   msdp = {'name': 'MSDPFL', 'fp': "out/CIFAR10/checkpoints_3/stats.npy"}
   opacus = {'name': 'Opacus FL', 'fp': "out/CIFAR10/checkpoints_1/stats.npy"}
-  non_private = {'name': 'Non-Private FL', 'fp': "out_centralMSDP/DR/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
-  title = 'FL on CIFAR-10'
+  np_centralised = {'name': 'Non-Private Centralised', 'fp': "out_centralMSDP/DR/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
+  np_fl = {'name': 'Non-Private FL', 'fp': "outFL/DR/checkpoints_2/stats.npy"}
+  title = 'FL training on DR'
 
-  files = [non_private]
+  files = [np_fl]
 
   for data_file in files:
     data = dict()
