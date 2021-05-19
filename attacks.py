@@ -10,6 +10,7 @@ from art.attacks.extraction import KnockoffNets
 from art.attacks.inference.membership_inference import MembershipInferenceBlackBox
 from art.estimators.classification.pytorch import PyTorchClassifier
 from libs.PrivacyRaven.src.privacyraven.extraction.core import ModelExtractionAttack
+from art.attacks.inference.model_inversion.mi_face import MIFace
 from libs.PrivacyRaven.src.privacyraven.models.victim import convert_to_inference
 from libs.PrivacyRaven.src.privacyraven.utils.query import get_target
 from sklearn.model_selection import train_test_split
@@ -25,6 +26,74 @@ def log(msg, logger=None):
     logger.log(msg)
   else:
     print(msg)
+
+
+def model_inversion(model: pl.LightningModule,
+                    loss: nn.modules.loss._Loss,
+                    optimizer_class: Type[optim.Optimizer],
+                    input_shape: Tuple[int, ...],
+                    num_classes: int,
+                    batch_size: int,
+                    epochs: int,
+                    test_dataset: Dataset,
+                    evaluator: Optional[nn.Module] = None,
+                    confidence_threshold: Optional[float] = 0.5,
+                    logger=None
+                    ):
+  log("Model Inversion attack has started...", logger)
+  _original_input_shape = input_shape
+  if len(input_shape) == 4:
+    input_shape = input_shape[1:]
+
+  # wrap the target model
+  target_model = PyTorchClassifier(model=model,
+                                   loss=loss,
+                                   optimizer=optimizer_class(model.parameters()),
+                                   input_shape=input_shape,
+                                   nb_classes=num_classes)
+  # create the attack class
+  attack = MIFace(target_model, max_iter=10000, threshold=1.)
+
+  # ids of target data classes
+  y = np.arange(num_classes)
+  test_dataset = deepcopy(test_dataset)
+  x_test, y_test = test_dataset.data, test_dataset.targets
+  x_init_average = np.zeros((num_classes, *input_shape)) + np.mean(x_test, axis=0)
+
+  class_gradient = target_model.class_gradient(x_init_average, y)
+  class_gradient = np.reshape(class_gradient, (num_classes, np.prod(input_shape)))
+  class_gradient_max = np.max(class_gradient, axis=1)
+  min_over_max_grads = np.min(class_gradient_max)
+  if min_over_max_grads < 1e-8:
+    log(f"!! Gradient too small !! The attack will not succeed {min_over_max_grads}", logger)
+    return 0, None
+
+  log("Inverting...", logger)
+  inverted_data = attack.infer(x_init_average, y)
+
+  if evaluator is None:
+    return inverted_data
+
+  evaluator = PyTorchClassifier(model=evaluator,
+                                loss=loss,
+                                optimizer=torch.optim.Adam(evaluator.parameters()),
+                                input_shape=input_shape,
+                                nb_classes=num_classes)
+  log("Training the evaluator", logger)
+  evaluator.fit(x_test, y_test, nb_epochs=epochs, batch_size=batch_size)
+
+  out = evaluator.predict(inverted_data)
+  successfully_inverted = 0
+  confidences = []
+  for i in range(len(out)):
+    confidence = out[i][i]
+    successfully_inverted += int(confidence > confidence_threshold)
+    confidences.append(round(confidence, 4))
+
+  attack_success = successfully_inverted / num_classes
+  log(f"Confidence per class: {list(zip(list(range(num_classes)), confidences))}")
+  log(f"Attack success {attack_success}", logger)
+  return attack_success, inverted_data
 
 
 def model_extraction_knockoffnets(model: pl.LightningModule,

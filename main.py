@@ -5,19 +5,24 @@ import warnings
 
 import numpy as np
 import pytorch_lightning as pl
+import torch.optim
 from torch import nn
 from matplotlib import pyplot as plt
 from shutil import move, rmtree
 
-from attacks import model_extraction, membership_inference_black_box, model_extraction_knockoffnets
+from attacks import (model_extraction,
+                     membership_inference_black_box,
+                     model_extraction_knockoffnets,
+                     model_inversion
+                     )
 from config import ExperimentConfig
 from datasets.dataset_util import *
-from dp.opacus_dp import opacus_training
+from torchvision.utils import make_grid
 from dp_stages import Stages
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
 from log import Logger
-from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR
+from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR, MnistClassifierCNN
 from msdp import MSPDTrainer
 
 
@@ -74,8 +79,7 @@ def attack_model(args: ExperimentConfig,
   if args.model_extraction:
     _set_seed()
     fidelity = 0
-    runs = 3
-    for _ in range(runs):
+    for _ in range(args.runs):
       fidelity += model_extraction(model=model,
                                    train_dataset=train_dataset,
                                    test_dataset=test_dataset,
@@ -88,8 +92,8 @@ def attack_model(args: ExperimentConfig,
                                    max_epochs=25,
                                    logger=logger
                                    )
-    fidelity = fidelity / runs
-    msg = f"Model extraction AVERAGE fidelity: {100 * fidelity:.2f}"
+    fidelity = fidelity / args.runs
+    msg = f"Model extraction AVERAGE fidelity: {100 * fidelity:.2f}%"
     logger.log(msg) if logger else print(msg)
 
     attack_results['MEA'] = {'fidelity': fidelity}
@@ -109,6 +113,38 @@ def attack_model(args: ExperimentConfig,
                                              logger=logger
                                              )
     attack_results['MEA_KnockOffNet'] = {'fidelity': fidelity}
+
+  if args.model_inversion:
+    _set_seed()
+    if train_dataset.name == 'cifar10':
+      evaluator = None
+    elif train_dataset.name == 'mnnist':
+      evaluator = MnistClassifierCNN()
+    else:
+      evaluator = None
+
+    attack_success, inverted_data = model_inversion(model=model,
+                                                    loss=nn.CrossEntropyLoss(),
+                                                    optimizer_class=torch.optim.SGD,
+                                                    input_shape=train_dataset.input_shape,
+                                                    num_classes=train_dataset.num_classes,
+                                                    test_dataset=test_dataset,
+                                                    batch_size=args.batch_size,
+                                                    epochs=10,
+                                                    evaluator=evaluator,
+                                                    confidence_threshold=0.5,
+                                                    logger=logger
+                                                    )
+    msg = f"Model Inversion AVERAGE success: {100 * attack_success:.2f}%"
+    logger.log(msg) if logger else print(msg)
+    attack_results['Model_Inversion'] = {'success': attack_success}
+
+    if inverted_data is not None:
+      grid = make_grid(torch.tensor(inverted_data),
+                       nrow=2, padding=2, normalize=False,
+                       range=None, scale_each=False, pad_value=0)
+      grid = grid.cpu().numpy()
+      plt.imsave(os.path.join(args.save_dir, 'inversion_result.png'), grid)
 
   return attack_results
 
@@ -287,19 +323,10 @@ def opacus_training_on_cifar10():
   args.weight_decay = 5e-4
   args.momentum = 0.9
   args.stage1 = False
-  args.stage2 = False  # using the opacus library here
+  args.stage2 = True  # using the opacus library here
   args.stage3 = False
 
-  print(args)
-
-  use_cuda = not args.no_cuda and torch.cuda.is_available()
-  device = torch.device("cuda" if use_cuda else "cpu")
-
-  dataloaders = load_dataset('cifar10', args)
-  model = Cifar10Net().to(device)
-  model = opacus_training(model, dataloaders, args)
-
-  attack_model(args, device, 'cifar10', Cifar10Net, model)
+  _train_msdp_and_attack(args, Cifar10Net, 'cifar10')
 
 
 @experiment
@@ -411,9 +438,9 @@ def non_private_training_on_mnist():
   args.stage2 = False
   args.stage3 = False
   args.stage4 = False
-  args.batch_size = 64
+  args.batch_size = 128
   args.epochs = 10
-  model_cls = MnistFCNet
+  model_cls = MnistCNNNet
 
   _train_msdp_and_attack(args, model_cls, 'mnist')
 
@@ -445,28 +472,19 @@ def opacus_training_on_mnist():
   args = ExperimentConfig()
   args.name = "Opacus training on MNIST"
   args.batch_size = 256
-  args.epochs = 6
-  args.noise_multiplier = 1
-  args.max_grad_norm = 5
+  args.epochs = 15
+  args.noise_multiplier = .75
+  args.max_grad_norm = 6
   args.lr = 0.02
   args.gamma = 0.7
   args.weight_decay = 5e-4
   args.momentum = 0.9
   args.stage1 = False
-  args.stage2 = False  # using the opacus library here
+  args.stage2 = True
   args.stage3 = False
   model_cls = MnistCNNNet
 
-  print(args)
-
-  use_cuda = not args.no_cuda and torch.cuda.is_available()
-  device = torch.device("cuda" if use_cuda else "cpu")
-
-  dataloaders = load_dataset('mnist', args)
-  model = model_cls().to(device)
-  model = opacus_training(model, dataloaders, args)
-
-  attack_model(args, device, 'mnist', model_cls, model)
+  _train_msdp_and_attack(args, model_cls, 'mnist')
 
 
 @experiment
@@ -662,8 +680,7 @@ def msdpfl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    # msdp_training_on_mnist,
-    msdp_training_on_dr
+    opacus_training_on_mnist
   ]
 
   for exp in experiments:

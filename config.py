@@ -4,7 +4,7 @@ import torch.optim
 class ExperimentConfig:
   def __init__(self):
     self.name = None
-
+    self.runs = 3
     ##########################
     # Client training
     ##########################
@@ -63,6 +63,7 @@ class ExperimentConfig:
     ##########################
     self.membership_inference = True
     self.model_extraction = True
+    self.model_inversion = False
     self.knockoffnet_extraction = False
 
   def __repr__(self):

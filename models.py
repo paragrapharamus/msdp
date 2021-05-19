@@ -161,6 +161,7 @@ class MnistCNNNet(MSDPBase):
       nn.ReLU(True),
       nn.MaxPool2d(2),
       nn.Conv2d(64, 128, kernel_size=3),
+      nn.ReLU(True),
       nn.Conv2d(128, self._NUM_CLASSES, kernel_size=3),
       # nn.Softmax(dim=1),
       # nn.LogSoftmax(dim=1)
@@ -199,6 +200,31 @@ class SqueezeNetDR(MSDPBase):
 
   def forward(self, x):
     return self.module(x).view(-1, self._NUM_CLASSES)
+
+
+class MnistClassifierCNN(nn.Module):
+  def __init__(self, ):
+    super(MnistClassifierCNN, self).__init__()
+
+    self.module = nn.Sequential(
+      nn.Conv2d(1, 64, kernel_size=3),
+      nn.ReLU(True),
+      nn.MaxPool2d(2),
+      nn.Conv2d(64, 128, kernel_size=3),
+      nn.ReLU(True),
+      nn.Dropout(0.5),
+      nn.MaxPool2d(2),
+      nn.Conv2d(128, 256, kernel_size=3),
+      nn.ReLU(True),
+      nn.Flatten(),
+      nn.Linear(256 * 9, 128),
+      nn.ReLU(True),
+      nn.Linear(128, 10),
+      nn.Softmax(dim=1),
+    )
+
+  def forward(self, x):
+    return self.module(x.float())
 
 
 class AttackModel(nn.Module):
