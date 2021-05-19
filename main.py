@@ -22,7 +22,7 @@ from dp_stages import Stages
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
 from log import Logger
-from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR, MnistClassifierCNN
+from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR, MnistClassifierCNN, Cifar10Classifier
 from msdp import MSPDTrainer
 
 
@@ -117,7 +117,7 @@ def attack_model(args: ExperimentConfig,
   if args.model_inversion:
     _set_seed()
     if train_dataset.name == 'cifar10':
-      evaluator = None
+      evaluator = Cifar10Classifier()
     elif train_dataset.name == 'mnnist':
       evaluator = MnistClassifierCNN()
     else:
@@ -125,13 +125,13 @@ def attack_model(args: ExperimentConfig,
 
     attack_success, inverted_data = model_inversion(model=model,
                                                     loss=nn.CrossEntropyLoss(),
-                                                    optimizer_class=torch.optim.SGD,
+                                                    optimizer_class=torch.optim.Adam,
                                                     input_shape=train_dataset.input_shape,
                                                     num_classes=train_dataset.num_classes,
                                                     test_dataset=test_dataset,
                                                     batch_size=args.batch_size,
-                                                    epochs=10,
-                                                    evaluator=evaluator,
+                                                    epochs=20,
+                                                    evaluator=None,
                                                     confidence_threshold=0.5,
                                                     logger=logger
                                                     )
@@ -141,10 +141,10 @@ def attack_model(args: ExperimentConfig,
 
     if inverted_data is not None:
       grid = make_grid(torch.tensor(inverted_data),
-                       nrow=2, padding=2, normalize=False,
-                       range=None, scale_each=False, pad_value=0)
+                       nrow=5, padding=2, normalize=True,
+                       value_range=(0, 255), scale_each=False, pad_value=0)
       grid = grid.cpu().numpy()
-      plt.imsave(os.path.join(args.save_dir, 'inversion_result.png'), grid)
+      plt.imsave(os.path.join(args.save_dir, 'inversion_result.png'), np.transpose(grid, (1, 2, 0)))
 
   return attack_results
 
@@ -705,17 +705,18 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
 def attack_test():
   _set_seed()
   args = ExperimentConfig()
-  model_cls = MnistCNNNet
+  model_cls = Cifar10Net
 
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
-  args.membership_inference = True
+  args.membership_inference = False
   args.model_extraction = False
+  args.model_inversion = True
   # args.knockoffnet_extraction = True
 
-  attack_model(args, device, 'mnist', architecture=model_cls,
-               checkpoint_path='out_centralMSDP/MNIST/cnn/opacus_training/final.ckpt')
+  attack_model(args, device, 'cifar10', architecture=model_cls,
+               checkpoint_path='out_centralMSDP/CIFAR10/checkpoints_1/final.ckpt')
 
 
 def _plot(data_dict, x_label, y_label, title):
@@ -807,5 +808,5 @@ if __name__ == '__main__':
   warnings.filterwarnings("ignore")
   # load_and_plot_privacy_param_variation()
   # load_and_plot_learning_curves()
-  run_experiments()
-  # attack_test()
+  # run_experiments()
+  attack_test()

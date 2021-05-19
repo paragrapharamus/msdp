@@ -52,12 +52,12 @@ def model_inversion(model: pl.LightningModule,
                                    input_shape=input_shape,
                                    nb_classes=num_classes)
   # create the attack class
-  attack = MIFace(target_model, max_iter=10000, threshold=1.)
+  attack = MIFace(target_model, max_iter=100000, threshold=1.)
 
   # ids of target data classes
   y = np.arange(num_classes)
   test_dataset = deepcopy(test_dataset)
-  x_test, y_test = test_dataset.data, test_dataset.targets
+  x_test, y_test = test_dataset.data.astype(float), test_dataset.targets
   x_init_average = np.zeros((num_classes, *input_shape)) + np.mean(x_test, axis=0)
 
   class_gradient = target_model.class_gradient(x_init_average, y)
@@ -72,7 +72,7 @@ def model_inversion(model: pl.LightningModule,
   inverted_data = attack.infer(x_init_average, y)
 
   if evaluator is None:
-    return inverted_data
+    return -1, inverted_data
 
   evaluator = PyTorchClassifier(model=evaluator,
                                 loss=loss,
