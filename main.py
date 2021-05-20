@@ -143,8 +143,8 @@ def attack_model(args: ExperimentConfig,
       grid = make_grid(torch.tensor(inverted_data),
                        nrow=5, padding=2, normalize=True,
                        value_range=(0, 255), scale_each=False, pad_value=0)
-      grid = grid.cpu().numpy()
-      plt.imsave(os.path.join(args.save_dir, 'inversion_result.png'), np.transpose(grid, (1, 2, 0)))
+      grid = np.transpose(grid.cpu().numpy(), (1, 2, 0))
+      plt.imsave(os.path.join(args.save_dir, f'inversion_result_{args.name}.png'), grid)
 
   return attack_results
 
@@ -207,7 +207,7 @@ def _train_fl_and_attack(args, model_cls, dataset_name):
                                aggregator_class=Aggregator,
                                rounds=args.num_rounds,
                                device=device,
-                               client_optimizer_class=torch.optim.SGD,
+                               client_optimizer_class=args.client_optimizer_class,
                                clients_per_round=args.clients_per_round,
                                client_local_test_split=args.client_local_test_split,
                                partition_method=args.partition_method,
@@ -240,7 +240,7 @@ def non_private_training_on_cifar10():
 @experiment
 def msdp_training_on_cifar10():
   args = ExperimentConfig()
-  args.name = f"MSDP on CIFAR10, Stage1={args.stage1}, Stage2={args.stage2}, Stage3={args.stage3}"
+  args.name = f"MSDP on CIFAR10"
   args.eps1 = 10
   args.noise_multiplier = 0.3
   args.max_grad_norm = 5
@@ -267,7 +267,7 @@ def msdp_stage_effect_on_cifar10():
     args.eps3 = 1
 
   args = ExperimentConfig()
-  args.name = f"MSDP on CIFAR10, Stage1={args.stage1}, Stage2={args.stage2}, Stage3={args.stage3}"
+  args.name = f"MSDP on CIFAR10"
   args.eps1 = 10
   args.noise_multiplier = 0.3
   args.max_grad_norm = 5
@@ -448,7 +448,7 @@ def non_private_training_on_mnist():
 @experiment
 def msdp_training_on_mnist():
   args = ExperimentConfig()
-  args.name = f"MSDP on MNIST, Stage1={args.stage1}, Stage2={args.stage2}, Stage3={args.stage3}"
+  args.name = f"MSDP on MNIST"
   args.eps1 = 25
   args.noise_multiplier = 0.6
   args.max_grad_norm = 6
@@ -680,7 +680,8 @@ def msdpfl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    opacus_training_on_mnist
+    msdpfl_on_mnist,
+
   ]
 
   for exp in experiments:
@@ -705,8 +706,8 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
 def attack_test():
   _set_seed()
   args = ExperimentConfig()
-  model_cls = Cifar10Net
-
+  model_cls = MnistCNNNet
+  args.name = 'np_mnist'
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -715,8 +716,8 @@ def attack_test():
   args.model_inversion = True
   # args.knockoffnet_extraction = True
 
-  attack_model(args, device, 'cifar10', architecture=model_cls,
-               checkpoint_path='out_centralMSDP/CIFAR10/checkpoints_1/final.ckpt')
+  attack_model(args, device, 'mnist', architecture=model_cls,
+               checkpoint_path='out/checkpoints_4/final.ckpt')
 
 
 def _plot(data_dict, x_label, y_label, title):
@@ -808,5 +809,5 @@ if __name__ == '__main__':
   warnings.filterwarnings("ignore")
   # load_and_plot_privacy_param_variation()
   # load_and_plot_learning_curves()
-  # run_experiments()
-  attack_test()
+  run_experiments()
+  # attack_test()

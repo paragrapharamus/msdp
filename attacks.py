@@ -40,6 +40,14 @@ def model_inversion(model: pl.LightningModule,
                     confidence_threshold: Optional[float] = 0.5,
                     logger=None
                     ):
+
+  def get_min_over_max_class_gradients(x, y):
+    class_gradient = target_model.class_gradient(x, y)
+    class_gradient = np.reshape(class_gradient, (num_classes, np.prod(input_shape)))
+    class_gradient_max = np.max(class_gradient, axis=1)
+    min_over_max_grads = np.min(class_gradient_max)
+    return min_over_max_grads
+
   log("Model Inversion attack has started...", logger)
   _original_input_shape = input_shape
   if len(input_shape) == 4:
@@ -52,24 +60,27 @@ def model_inversion(model: pl.LightningModule,
                                    input_shape=input_shape,
                                    nb_classes=num_classes)
   # create the attack class
-  attack = MIFace(target_model, max_iter=100000, threshold=1.)
+  attack = MIFace(target_model, max_iter=1000, threshold=1.)
 
   # ids of target data classes
   y = np.arange(num_classes)
   test_dataset = deepcopy(test_dataset)
-  x_test, y_test = test_dataset.data.astype(float), test_dataset.targets
-  x_init_average = np.zeros((num_classes, *input_shape)) + np.mean(x_test, axis=0)
 
-  class_gradient = target_model.class_gradient(x_init_average, y)
-  class_gradient = np.reshape(class_gradient, (num_classes, np.prod(input_shape)))
-  class_gradient_max = np.max(class_gradient, axis=1)
-  min_over_max_grads = np.min(class_gradient_max)
+  x_test, y_test = test_dataset.data.astype(float), test_dataset.targets
+
+  x_init = np.zeros((num_classes, *input_shape)) + np.mean(x_test, axis=0)
+  min_over_max_grads = get_min_over_max_class_gradients(x_init, y)
+  log(f"Min of max gradients: {min_over_max_grads}", logger)
+
   if min_over_max_grads < 1e-8:
-    log(f"!! Gradient too small !! The attack will not succeed {min_over_max_grads}", logger)
-    return 0, None
+    log(f"!! Gradient too small !! The attack will not succeed", logger)
+    log(f"Reinitialisation", logger)
+    x_init = np.zeros((num_classes, *input_shape))
+    min_over_max_grads = get_min_over_max_class_gradients(x_init, y)
+    log(f"Min of max gradients: {min_over_max_grads}", logger)
 
   log("Inverting...", logger)
-  inverted_data = attack.infer(x_init_average, y)
+  inverted_data = attack.infer(x_init, y)
 
   if evaluator is None:
     return -1, inverted_data

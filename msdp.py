@@ -151,7 +151,6 @@ class MSPDTrainer:
                               logger=self.tensorboardlogger,
                               callbacks=self.trainer_callbacks,
                               progress_bar_refresh_rate=0,
-                              accumulate_grad_batches=self.virtual_batches,
                               num_sanity_val_steps=0,
                               deterministic=True)
 
@@ -160,6 +159,8 @@ class MSPDTrainer:
     if not self.optimizer:
       self.log_warning("Using a default optimizer. Please provide an optimizer for personalized training")
       self.optimizer = self.model.default_optimizer()
+    else:
+      self.model.add_optimizer(self.optimizer)
 
     loaders = [self.train_loader]
     if hasattr(self, 'val_loader'):

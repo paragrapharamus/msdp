@@ -168,7 +168,7 @@ class MnistCNNNet(MSDPBase):
     )
 
   def forward(self, x):
-    return self.module(x).view(-1, self._NUM_CLASSES)
+    return self.module(x.float()).view(-1, self._NUM_CLASSES)
 
 
 class MnistFCNet(MSDPBase):
