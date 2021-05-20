@@ -629,6 +629,29 @@ def msdp_training_on_dr():
 
 
 @experiment
+def opacus_training_on_dr():
+  args = ExperimentConfig()
+  args.name = f"Opacus on DR"
+  args.noise_multiplier = 2
+  args.virtual_batches = 10
+  args.stage1 = False
+  args.stage2 = True
+  args.stage3 = False
+  args.batch_size = 100
+  args.test_batch_size = 100
+  args.epochs = 60
+  args.lr = 0.002
+  args.gamma = 0.7
+  args.weight_decay = 5e-4
+  args.momentum = 0.9
+  args.membership_inference = False
+  args.model_extraction = False
+  model_cls = SqueezeNetDR
+
+  _train_msdp_and_attack(args, model_cls, 'dr')
+
+
+@experiment
 def nonprivate_fl_training_on_dr():
   args = ExperimentConfig()
   args.name = "Non-Private FL on DR"
@@ -678,9 +701,34 @@ def msdpfl_training_on_dr():
   _train_fl_and_attack(args, model_cls, 'dr')
 
 
+@experiment
+def opacus_fl_training_on_dr():
+  args = ExperimentConfig()
+  args.name = "OpacusFL on DR"
+  args.num_rounds = 60
+  args.epochs = 2
+  args.batch_size = 50
+  args.virtual_batches = 50
+  args.lr = 0.002
+  args.stage1 = False
+  args.stage2 = True
+  args.stage3 = False
+  args.stage4 = False
+  args.noise_multiplier = 2
+  args.max_grad_norm = 4
+  args.num_clients = 10
+  args.partition_method = 'homogeneous'
+  args.clients_per_round = 5
+  args.membership_inference = False
+  args.model_extraction = False
+  model_cls = SqueezeNetDR
+
+  _train_fl_and_attack(args, model_cls, 'dr')
+
+
 def run_experiments():
   experiments = [
-    msdpfl_on_mnist,
+    opacus_training_on_dr,
 
   ]
 
