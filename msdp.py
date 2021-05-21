@@ -180,12 +180,12 @@ class MSPDTrainer:
                                                                  self.batch_size,
                                                                  len(self.train_loader.dataset),
                                                                  self.virtual_batches))
+      self.model.privacy_info = self._log_privacy_info
 
     self.trainer.fit(self.model, *loaders)
 
     if Stages.STAGE_2 in self.stages:
-      eps, delta = self.stages[Stages.STAGE_2].get_privacy_spent(len(self.train_loader.dataset))
-      self.log(f'Privacy from Stage 2: (ε={eps:.2f}, δ={delta:.2e})')
+      self._log_privacy_info()
       self.stages[Stages.STAGE_2].detach()
 
     # Inject noise to model's weights
@@ -200,6 +200,10 @@ class MSPDTrainer:
 
     self.model.cpu()
     return self.model
+
+  def _log_privacy_info(self):
+    eps, delta = self.stages[Stages.STAGE_2].get_privacy_spent(len(self.train_loader.dataset))
+    self.log(f'Privacy from Stage 2: (ε={eps:.2f}, δ={delta:.2e})')
 
   def test(self):
     if hasattr(self, 'test_loader'):

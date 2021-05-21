@@ -61,6 +61,8 @@ class MSDPBase(pl.LightningModule):
     self.training_accuracies.append(accuracy.item())
     if self.personal_log_fn:
       self.personal_log_fn(f"Train epoch {self.current_epoch} - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
+      if hasattr(self, 'privacy_info'):
+        self.privacy_info()
 
   def validation_step(self, batch, batch_idx):
     data, targets = batch

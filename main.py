@@ -241,16 +241,17 @@ def non_private_training_on_cifar10():
 def msdp_training_on_cifar10():
   args = ExperimentConfig()
   args.name = f"MSDP on CIFAR10"
-  args.eps1 = 10
-  args.noise_multiplier = 0.3
-  args.max_grad_norm = 5
+  args.eps1 = 5
+  args.stage1 = True
+  args.noise_multiplier = 2
+  args.max_grad_norm = 2
   args.virtual_batches = 1
   args.eps3 = 1
   args.max_weight_norm = 20
   args.batch_size = 256
   args.test_batch_size = 1000
   args.epochs = 25
-  args.lr = 0.02
+  args.lr = 0.005
   args.gamma = 0.7
   args.weight_decay = 5e-4
   args.momentum = 0.9
@@ -316,9 +317,9 @@ def opacus_training_on_cifar10():
   args.name = "Opacus training on CIFAR10"
   args.batch_size = 256
   args.epochs = 25
-  args.noise_multiplier = 0.5
-  args.max_grad_norm = 6
-  args.lr = 0.02
+  args.noise_multiplier = 2
+  args.max_grad_norm = 2
+  args.lr = 0.005
   args.gamma = 0.7
   args.weight_decay = 5e-4
   args.momentum = 0.9
@@ -473,8 +474,8 @@ def opacus_training_on_mnist():
   args.name = "Opacus training on MNIST"
   args.batch_size = 256
   args.epochs = 15
-  args.noise_multiplier = .75
-  args.max_grad_norm = 6
+  args.noise_multiplier = 1.5
+  args.max_grad_norm = 2
   args.lr = 0.02
   args.gamma = 0.7
   args.weight_decay = 5e-4
@@ -706,16 +707,16 @@ def opacus_fl_training_on_dr():
   args = ExperimentConfig()
   args.name = "OpacusFL on DR"
   args.num_rounds = 60
-  args.epochs = 2
-  args.batch_size = 50
-  args.virtual_batches = 50
+  args.epochs = 5
+  args.batch_size = 130
+  args.virtual_batches = 1
   args.lr = 0.002
   args.stage1 = False
   args.stage2 = True
   args.stage3 = False
   args.stage4 = False
   args.noise_multiplier = 2
-  args.max_grad_norm = 4
+  args.max_grad_norm = 2
   args.num_clients = 10
   args.partition_method = 'homogeneous'
   args.clients_per_round = 5
@@ -728,7 +729,8 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    opacus_training_on_dr,
+    opacus_fl_training_on_dr,
+    # msdp_training_on_cifar10
 
   ]
 
@@ -754,18 +756,18 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
 def attack_test():
   _set_seed()
   args = ExperimentConfig()
-  model_cls = MnistCNNNet
+  model_cls = Cifar10Net
   args.name = 'np_mnist'
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
-  args.membership_inference = False
-  args.model_extraction = False
-  args.model_inversion = True
+  args.membership_inference = True
+  args.model_extraction = True
+  args.model_inversion = False
   # args.knockoffnet_extraction = True
 
-  attack_model(args, device, 'mnist', architecture=model_cls,
-               checkpoint_path='out/checkpoints_4/final.ckpt')
+  attack_model(args, device, 'cifar10', architecture=model_cls,
+               checkpoint_path='out/checkpoints_4/checkpoint-epoch=24-valid_acc=0.53.ckpt')
 
 
 def _plot(data_dict, x_label, y_label, title):
