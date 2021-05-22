@@ -81,9 +81,8 @@ def attack_model(args: ExperimentConfig,
     fidelity = 0
     for _ in range(args.runs):
       fidelity += model_extraction(model=model,
-                                   train_dataset=train_dataset,
                                    test_dataset=test_dataset,
-                                   query_limit=len(test_dataset),
+                                   query_limit=250,
                                    victim_input_shape=train_dataset.input_shape,
                                    num_classes=train_dataset.num_classes,
                                    attacker_input_shape=train_dataset.input_shape,
@@ -118,7 +117,7 @@ def attack_model(args: ExperimentConfig,
     _set_seed()
     if train_dataset.name == 'cifar10':
       evaluator = Cifar10Classifier()
-    elif train_dataset.name == 'mnnist':
+    elif train_dataset.name == 'mnist':
       evaluator = MnistClassifierCNN()
     else:
       evaluator = None
@@ -131,7 +130,7 @@ def attack_model(args: ExperimentConfig,
                                                     test_dataset=test_dataset,
                                                     batch_size=args.batch_size,
                                                     epochs=20,
-                                                    evaluator=None,
+                                                    evaluator=evaluator,
                                                     confidence_threshold=0.5,
                                                     logger=logger
                                                     )
@@ -439,7 +438,7 @@ def non_private_training_on_mnist():
   args.stage2 = False
   args.stage3 = False
   args.stage4 = False
-  args.batch_size = 128
+  args.batch_size = 256
   args.epochs = 10
   model_cls = MnistCNNNet
 
@@ -450,12 +449,13 @@ def non_private_training_on_mnist():
 def msdp_training_on_mnist():
   args = ExperimentConfig()
   args.name = f"MSDP on MNIST"
-  args.eps1 = 25
-  args.noise_multiplier = 0.6
-  args.max_grad_norm = 6
+  args.eps1 = 2
+  args.stage1 = False
+  args.noise_multiplier = 1.5
+  args.max_grad_norm = 2
   args.virtual_batches = 1
   args.eps3 = 2
-  args.max_weight_norm = 20
+  args.max_weight_norm = 10
   args.batch_size = 256
   args.test_batch_size = 1000
   args.epochs = 15
@@ -729,8 +729,9 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    opacus_fl_training_on_dr,
-    # msdp_training_on_cifar10
+    # opacus_training_on_mnist,
+    msdp_training_on_mnist,
+    # non_private_training_on_mnist,
 
   ]
 
@@ -757,17 +758,27 @@ def attack_test():
   _set_seed()
   args = ExperimentConfig()
   model_cls = Cifar10Net
-  args.name = 'np_mnist'
+  args.name = 'np_cifar'
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
-  args.membership_inference = True
-  args.model_extraction = True
-  args.model_inversion = False
+  args.membership_inference = False
+  args.model_extraction = False
+  args.model_inversion = True
   # args.knockoffnet_extraction = True
 
   attack_model(args, device, 'cifar10', architecture=model_cls,
-               checkpoint_path='out/checkpoints_4/checkpoint-epoch=24-valid_acc=0.53.ckpt')
+               checkpoint_path='out/checkpoints_1/final.ckpt')
+
+  _set_seed()
+  args.name = 'mspd_cifar'
+  attack_model(args, device, 'cifar10', architecture=model_cls,
+               checkpoint_path='out/checkpoints_3/final.ckpt')
+
+  _set_seed()
+  args.name = 'opacus_cifar'
+  attack_model(args, device, 'cifar10', architecture=model_cls,
+               checkpoint_path='out/opacus_training/final.ckpt')
 
 
 def _plot(data_dict, x_label, y_label, title):
@@ -800,22 +811,25 @@ def _plot(data_dict, x_label, y_label, title):
 
 
 def load_and_plot_privacy_param_variation():
-  # eps1 = {'name': 'eps_1', 'fp': './eps1.npy'}
-  # noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy'}
-  # eps3 = {'name': 'eps_3', 'fp': './eps3.npy'}
-  #
-  # files = [eps1, noise_multiplier, eps3]
+  eps1_range = [0.5, 2, 4, 8, 10, 15, 20]
+  noise_multiplier_range = [0.1, 0.3, 0.5, 0.7, 0.8, 1]
+  eps3_range = [0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]
 
-  num_c = {'name': 'num_clients', 'fp': './num_clients.npy'}
-  files = [num_c]
+  eps1 = {'name': 'eps_1', 'fp': './eps1.npy', 'rng': [0.5, 2, 4, 8, 10, 15, 20]}
+  noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy', 'rng': [0.1, 0.3, 0.5, 0.7, 0.8, 1]}
+  eps3 = {'name': 'eps_3', 'fp': './eps3.npy', 'rng':[0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]}
+
+  files = [eps1]#, noise_multiplier, eps3]
+
   curve_names = ['Test accuracy', 'MEA fidelity', 'MIA accuracy']
 
   for data_file in files:
     data = dict()
     with open(data_file['fp'], 'rb') as f:
-      data['x_ticks'] = np.load(f)
+      # data['x_ticks'] = np.load(f)
       for curve in curve_names:
         data[curve] = np.load(f)
+      data['x_ticks'] = np.array(data_file['rng'])
     _plot(data, data_file['name'], 'Privacy and Utility', 'Small CNN on Cifar10')
 
 
@@ -859,5 +873,5 @@ if __name__ == '__main__':
   warnings.filterwarnings("ignore")
   # load_and_plot_privacy_param_variation()
   # load_and_plot_learning_curves()
-  run_experiments()
-  # attack_test()
+  # run_experiments()
+  attack_test()

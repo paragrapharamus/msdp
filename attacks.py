@@ -42,11 +42,10 @@ def model_inversion(model: pl.LightningModule,
                     ):
 
   def get_min_over_max_class_gradients(x, y):
-    class_gradient = target_model.class_gradient(x, y)
-    class_gradient = np.reshape(class_gradient, (num_classes, np.prod(input_shape)))
+    class_gradient = victim_model.class_gradient(x, y)
+    class_gradient = np.reshape(class_gradient, (len(y), np.prod(input_shape)))
     class_gradient_max = np.max(class_gradient, axis=1)
-    min_over_max_grads = np.min(class_gradient_max)
-    return min_over_max_grads
+    return np.min(class_gradient_max)
 
   log("Model Inversion attack has started...", logger)
   _original_input_shape = input_shape
@@ -54,13 +53,13 @@ def model_inversion(model: pl.LightningModule,
     input_shape = input_shape[1:]
 
   # wrap the target model
-  target_model = PyTorchClassifier(model=model,
+  victim_model = PyTorchClassifier(model=model,
                                    loss=loss,
                                    optimizer=optimizer_class(model.parameters()),
                                    input_shape=input_shape,
                                    nb_classes=num_classes)
   # create the attack class
-  attack = MIFace(target_model, max_iter=1000, threshold=1.)
+  attack = MIFace(victim_model, max_iter=100000, threshold=1., batch_size=256)
 
   # ids of target data classes
   y = np.arange(num_classes)
@@ -68,22 +67,18 @@ def model_inversion(model: pl.LightningModule,
 
   x_test, y_test = test_dataset.data.astype(float), test_dataset.targets
 
-  x_init = np.zeros((num_classes, *input_shape)) + np.mean(x_test, axis=0)
+  x_init = np.zeros((len(y), *input_shape)) # + np.mean(x_test, axis=0)
   min_over_max_grads = get_min_over_max_class_gradients(x_init, y)
   log(f"Min of max gradients: {min_over_max_grads}", logger)
-
-  if min_over_max_grads < 1e-8:
-    log(f"!! Gradient too small !! The attack will not succeed", logger)
-    log(f"Reinitialisation", logger)
-    x_init = np.zeros((num_classes, *input_shape))
-    min_over_max_grads = get_min_over_max_class_gradients(x_init, y)
-    log(f"Min of max gradients: {min_over_max_grads}", logger)
 
   log("Inverting...", logger)
   inverted_data = attack.infer(x_init, y)
 
   if evaluator is None:
     return -1, inverted_data
+
+  if _original_input_shape[1] == 1 and len(x_test.shape) < len(_original_input_shape):
+    x_test = np.expand_dims(x_test, axis=1)
 
   evaluator = PyTorchClassifier(model=evaluator,
                                 loss=loss,
@@ -99,7 +94,7 @@ def model_inversion(model: pl.LightningModule,
   for i in range(len(out)):
     confidence = out[i][i]
     successfully_inverted += int(confidence > confidence_threshold)
-    confidences.append(round(confidence, 4))
+    confidences.append(confidence)
 
   attack_success = successfully_inverted / num_classes
   log(f"Confidence per class: {list(zip(list(range(num_classes)), confidences))}")
@@ -165,7 +160,6 @@ def model_extraction_knockoffnets(model: pl.LightningModule,
 
 
 def model_extraction(model: pl.LightningModule,
-                     train_dataset: Dataset,
                      test_dataset: Dataset,
                      query_limit: int,
                      victim_input_shape: Tuple[int, ...],
@@ -189,9 +183,7 @@ def model_extraction(model: pl.LightningModule,
   model = convert_to_inference(model)
 
   # Obtain seed (or public) data to be used in extraction
-  train_dataset = truncate(deepcopy(train_dataset), query_limit // 2)
-  test_dataset = truncate(deepcopy(test_dataset), query_limit // 2)
-  dataset = merge_datasets(train_dataset, test_dataset)
+  dataset = deepcopy(test_dataset)
 
   split_ratio = 0.1
   train_data, test_data = random_split(dataset,

@@ -17,7 +17,9 @@ def label_agreement(
 
   limit = int(len(test_data))
 
-  limit = min(1000, limit)
+  if limit >= 100:
+    # We limit test data to 100 samples for efficiency
+    limit = 100
   x_data, y_data = process_data(test_data, limit)
 
   substitute_result = get_target(substitute_model, x_data, substitute_input_shape)
