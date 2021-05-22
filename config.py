@@ -61,9 +61,9 @@ class ExperimentConfig:
     ##########################
     # Enable Attacks
     ##########################
-    self.membership_inference = False
+    self.membership_inference = True
     self.model_extraction = False
-    self.model_inversion = True
+    self.model_inversion = False
     self.knockoffnet_extraction = False
 
   def __repr__(self):

@@ -40,7 +40,6 @@ def model_inversion(model: pl.LightningModule,
                     confidence_threshold: Optional[float] = 0.5,
                     logger=None
                     ):
-
   def get_min_over_max_class_gradients(x, y):
     class_gradient = victim_model.class_gradient(x, y)
     class_gradient = np.reshape(class_gradient, (len(y), np.prod(input_shape)))
@@ -67,7 +66,7 @@ def model_inversion(model: pl.LightningModule,
 
   x_test, y_test = test_dataset.data.astype(float), test_dataset.targets
 
-  x_init = np.zeros((len(y), *input_shape)) # + np.mean(x_test, axis=0)
+  x_init = np.zeros((len(y), *input_shape)) + np.mean(x_test, axis=0)
   min_over_max_grads = get_min_over_max_class_gradients(x_init, y)
   log(f"Min of max gradients: {min_over_max_grads}", logger)
 

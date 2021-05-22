@@ -240,17 +240,16 @@ def non_private_training_on_cifar10():
 def msdp_training_on_cifar10():
   args = ExperimentConfig()
   args.name = f"MSDP on CIFAR10"
-  args.eps1 = 5
-  args.stage1 = True
-  args.noise_multiplier = 2
-  args.max_grad_norm = 2
+  args.eps1 = 2.5
+  args.noise_multiplier = 1
+  args.max_grad_norm = 1.75
   args.virtual_batches = 1
   args.eps3 = 1
-  args.max_weight_norm = 20
+  args.max_weight_norm = 15
   args.batch_size = 256
   args.test_batch_size = 1000
   args.epochs = 25
-  args.lr = 0.005
+  args.lr = 0.02
   args.gamma = 0.7
   args.weight_decay = 5e-4
   args.momentum = 0.9
@@ -606,14 +605,12 @@ def non_private_training_on_dr():
 def msdp_training_on_dr():
   args = ExperimentConfig()
   args.name = f"MSDP on DR"
-  args.eps1 = 8
-  args.noise_multiplier = 0.35
-  args.max_grad_norm = 4.5
-  args.virtual_batches = 1
+  args.eps1 = 5
+  args.noise_multiplier = 0.4
+  args.max_grad_norm = 5
+  args.virtual_batches = 10
   args.eps3 = 1
   args.max_weight_norm = 18
-  args.stage2 = False
-  args.stage3 = False
   args.batch_size = 100
   args.test_batch_size = 100
   args.epochs = 20
@@ -729,9 +726,9 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    # opacus_training_on_mnist,
-    msdp_training_on_mnist,
-    # non_private_training_on_mnist,
+    # opacus_training_on_cifar10,
+    msdp_training_on_dr,
+    # non_private_training_on_cifar10,
 
   ]
 
@@ -873,5 +870,5 @@ if __name__ == '__main__':
   warnings.filterwarnings("ignore")
   # load_and_plot_privacy_param_variation()
   # load_and_plot_learning_curves()
-  # run_experiments()
-  attack_test()
+  run_experiments()
+  # attack_test()

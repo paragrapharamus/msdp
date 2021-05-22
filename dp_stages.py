@@ -135,14 +135,16 @@ class Stage1(DPStage):
     """
       Based on -> https://arxiv.org/abs/2002.08570
     """
-    n = dataset_len
-    delta = 1 / (2 * n)
-    std = self.max_grad_norm * np.sqrt(epochs * np.log(1 / delta) / n * (n - 1)) / self.eps
-    if len(data) == dataset_len:
-      self.log(f"Input perturbation: std={std:.2e}, ({self.eps}, {delta})-DP")
-    noise = torch.normal(0, std, size=data.shape, device=data.device)
-    data += noise
-    return data
+    with torch.no_grad():
+      data = data.clone()
+      n = dataset_len
+      delta = 1 / (2 * n)
+      std = self.max_grad_norm * np.sqrt(epochs * np.log(1 / delta) / n * (n - 1)) / self.eps
+      if len(data) == dataset_len:
+        self.log(f"Input perturbation: std={std:.2e}, ({self.eps}, {delta})-DP")
+      noise = torch.normal(0, std, size=data.shape, device=data.device)
+      data += noise
+      return data
 
   def _get_sensitivity(self, dataset: torch.Tensor) -> torch.Tensor:
     """
