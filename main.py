@@ -6,6 +6,7 @@ import warnings
 import numpy as np
 import pytorch_lightning as pl
 import torch.optim
+from matplotlib.ticker import NullFormatter
 from torch import nn
 from matplotlib import pyplot as plt
 from shutil import move, rmtree
@@ -22,7 +23,7 @@ from dp_stages import Stages
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
 from log import Logger
-from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR, MnistClassifierCNN, Cifar10Classifier
+from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR, MnistClassifierCNN, Cifar10Classifier, Cifar10ResNet
 from msdp import MSPDTrainer
 
 
@@ -437,9 +438,9 @@ def non_private_training_on_mnist():
   args.stage2 = False
   args.stage3 = False
   args.stage4 = False
-  args.batch_size = 256
+  args.batch_size = 128
   args.epochs = 10
-  model_cls = MnistCNNNet
+  model_cls = MnistFCNet
 
   _train_msdp_and_attack(args, model_cls, 'mnist')
 
@@ -482,7 +483,7 @@ def opacus_training_on_mnist():
   args.stage1 = False
   args.stage2 = True
   args.stage3 = False
-  model_cls = MnistCNNNet
+  model_cls = MnistFCNet
 
   _train_msdp_and_attack(args, model_cls, 'mnist')
 
@@ -726,9 +727,10 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    # opacus_training_on_cifar10,
-    msdp_training_on_dr,
-    # non_private_training_on_cifar10,
+    # msdp_training_on_cifar10,
+    # opacus_training_on_cifar10
+    non_private_training_on_cifar10,
+    # msdp_training_on_mnist,
 
   ]
 
@@ -754,8 +756,7 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
 def attack_test():
   _set_seed()
   args = ExperimentConfig()
-  model_cls = Cifar10Net
-  args.name = 'np_cifar'
+  model_cls = Cifar10ResNet
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -764,18 +765,18 @@ def attack_test():
   args.model_inversion = True
   # args.knockoffnet_extraction = True
 
+  args.name = 'msdp_cifar_resnet'
   attack_model(args, device, 'cifar10', architecture=model_cls,
-               checkpoint_path='out/checkpoints_1/final.ckpt')
+               checkpoint_path='out/msdp/final.ckpt')
 
-  _set_seed()
-  args.name = 'mspd_cifar'
+  args.name = 'np_cifar_resnet'
   attack_model(args, device, 'cifar10', architecture=model_cls,
-               checkpoint_path='out/checkpoints_3/final.ckpt')
+               checkpoint_path='out/np/final.ckpt')
 
-  _set_seed()
-  args.name = 'opacus_cifar'
+  args.name = 'opacus_cifar_resnet'
   attack_model(args, device, 'cifar10', architecture=model_cls,
-               checkpoint_path='out/opacus_training/final.ckpt')
+               checkpoint_path='out/opacus/final.ckpt')
+
 
 
 def _plot(data_dict, x_label, y_label, title):
@@ -783,6 +784,8 @@ def _plot(data_dict, x_label, y_label, title):
 
   if 'x_ticks' in data_dict:
     x_values = data_dict.pop('x_ticks')
+    if len(x_values) > 20:
+      x_values = None  # too crowded to read on the figure
   else:
     x_values = None
 
@@ -791,15 +794,11 @@ def _plot(data_dict, x_label, y_label, title):
     if x_values is not None:
       ax.plot(list(range(len(x_values))), data, label=name)
     else:
-      ax.plot(list(range(len(data))), data, label=name)
-      max_x_range_len = max(max_x_range_len, len(data))
+      ax.plot(data, label=name)
 
   if x_values is not None:
     plt.xticks(list(range(len(x_values))), x_values)
-  else:
-    ticks = list(range(max_x_range_len))
-    values = list(range(1, max_x_range_len + 1))
-    plt.xticks(ticks, values)
+
   ax.legend()
   plt.xlabel(x_label)
   plt.ylabel(y_label)
@@ -808,25 +807,21 @@ def _plot(data_dict, x_label, y_label, title):
 
 
 def load_and_plot_privacy_param_variation():
-  eps1_range = [0.5, 2, 4, 8, 10, 15, 20]
-  noise_multiplier_range = [0.1, 0.3, 0.5, 0.7, 0.8, 1]
-  eps3_range = [0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]
+  eps1 = {'name': 'eps_1', 'fp': './eps1.npy', }
+  noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy'}
+  eps3 = {'name': 'eps_3', 'fp': './eps3.npy'}
 
-  eps1 = {'name': 'eps_1', 'fp': './eps1.npy', 'rng': [0.5, 2, 4, 8, 10, 15, 20]}
-  noise_multiplier = {'name': 'noise_multiplier', 'fp': './noise_multiplier.npy', 'rng': [0.1, 0.3, 0.5, 0.7, 0.8, 1]}
-  eps3 = {'name': 'eps_3', 'fp': './eps3.npy', 'rng':[0.001, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 2, 3]}
-
-  files = [eps1]#, noise_multiplier, eps3]
+  files = [eps3]
 
   curve_names = ['Test accuracy', 'MEA fidelity', 'MIA accuracy']
 
   for data_file in files:
     data = dict()
     with open(data_file['fp'], 'rb') as f:
-      # data['x_ticks'] = np.load(f)
+      data['x_ticks'] = np.load(f)
       for curve in curve_names:
         data[curve] = np.load(f)
-      data['x_ticks'] = np.array(data_file['rng'])
+      # data['x_ticks'] = np.array(data_file['rng'])
     _plot(data, data_file['name'], 'Privacy and Utility', 'Small CNN on Cifar10')
 
 
@@ -837,20 +832,14 @@ def load_and_plot_learning_curves():
       metric_data[f['name']] = f[metric_name]
     return metric_data
 
-  metrics = ['val_acc']
+  metrics = ['training time (s)']#['train_loss', 'train_acc', 'val_acc']
 
-  # msdp = {'name': 'MSDPFL', 'fp': "out/MNIST/checkpoints_2/stats.npy"}
-  # opacus = {'name': 'Opacus FL', 'fp': "out/MNIST/checkpoints_4/stats.npy"}
-  # non_private = {'name': 'Non-Private FL', 'fp': "out/MNIST/checkpoints_1/stats.npy"}
-  # title = 'FL on MNIST'
+  msdp = {'name': 'MSDP', 'fp': "out_centralMSDP/CIFAR10/new/msdp/MSDPTrainer_0_plot_stats.npy"}
+  opacus = {'name': 'Opacus', 'fp': "out_centralMSDP/CIFAR10/new/opacus/MSDPTrainer_0_plot_stats.npy"}
+  non_p = {'name': 'Non-Private', 'fp': "out_centralMSDP/CIFAR10/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
+  title = 'CNN on CIFAR-10'
 
-  msdp = {'name': 'MSDPFL', 'fp': "out/CIFAR10/checkpoints_3/stats.npy"}
-  opacus = {'name': 'Opacus FL', 'fp': "out/CIFAR10/checkpoints_1/stats.npy"}
-  np_centralised = {'name': 'Non-Private Centralised', 'fp': "out_centralMSDP/DR/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
-  np_fl = {'name': 'Non-Private FL', 'fp': "outFL/DR/checkpoints_2/stats.npy"}
-  title = 'FL training on DR'
-
-  files = [np_fl]
+  files = [msdp, opacus, non_p]
 
   for data_file in files:
     data = dict()
@@ -863,12 +852,63 @@ def load_and_plot_learning_curves():
 
   for metric in metrics:
     metric_data = fetch(files, metric)
-    _plot(metric_data, 'Rounds', metric, title)
+    _plot(metric_data, 'Epochs', metric, title)
+
+
+def load_and_plot_dr():
+  def fetch(fs, metric_name):
+    metric_data = dict()
+    for f in fs:
+      metric_data[f['name']] = f[metric_name]
+    return metric_data
+
+  def dr_plot(data_dict, x_label, y_label, title):
+    fig, ax = plt.subplots()  # (figsize=(10,10))
+    for name, data in data_dict.items():
+      ax.plot(data, label=name)
+    ax.legend()
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+    plt.show()
+
+  metrics = {'centralised': ['train_loss', 'train_acc', 'val_acc'],
+             'fl': ['val_acc']
+             }
+
+  msdp = {'name': 'MSDP', 'fp': "out_centralMSDP/DR/msdp/MSDPTrainer_0_plot_stats.npy"}
+  msdpfl = {'name': 'MSDPFL', 'fp': "outFL/DR/msdpfl/stats.npy"}
+  opacus = {'name': 'Opacus', 'fp': "out_centralMSDP/DR/opacus/MSDPTrainer_0_plot_stats.npy"}
+  opacusfl = {'name': 'OpacusFL', 'fp': "outFL/DR/opacus_fl/stats.npy"}
+  non_p = {'name': 'Non-Private', 'fp': "out_centralMSDP/DR/np/MSDPTrainer_0_plot_stats.npy"}
+  non_pfl = {'name': 'Non-Private FL', 'fp': "outFL/DR/np_fl/stats.npy"}
+  title = 'FL training on DR'
+
+  central = [msdp, opacus, non_p]
+  fl = [msdpfl, opacusfl, non_pfl]
+  files = central + fl
+
+  for data_file in files:
+    data = dict()
+    if data_file in central:
+      metric_type = 'centralised'
+    else:
+      metric_type = 'fl'
+    with open(data_file['fp'], 'rb') as f:
+      for metric in metrics[metric_type]:
+        data[metric] = np.load(f)
+
+    data_file.update(**data)
+
+  for metric in ['val_acc']:
+    metric_data = fetch(files, metric)
+    dr_plot(metric_data, 'Epochs/ Rounds', metric, title)
 
 
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
   # load_and_plot_privacy_param_variation()
   # load_and_plot_learning_curves()
-  run_experiments()
-  # attack_test()
+  # load_and_plot_dr()
+  # run_experiments()
+  attack_test()

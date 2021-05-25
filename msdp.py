@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 
 from dp_stages import Stages, Stage1, Stage2, Stage3
 from log import Logger
-
+import time
 
 class MSPDTrainer:
   """
@@ -48,6 +48,7 @@ class MSPDTrainer:
                save_dir: Optional[str] = 'out/'):
 
     self.id = f'MSDPTrainer_{id}'
+    self.start_time = time.time()
     self.model = model
 
     self.trainer_callbacks = None
@@ -240,6 +241,22 @@ class MSPDTrainer:
       np.save(f, training_losses)
       np.save(f, training_accuracies)
       np.save(f, validation_accuracies)
+    self._save_time()
+
+  def _save_time(self):
+    times = self.model.times
+    times.insert(0, self.start_time)
+    times = np.array(times)
+    times -= self.start_time
+    file_id = f'{self.id}_times.npy'
+    if self.checkpoint_dir:
+      fp = os.path.join(self.checkpoint_dir, file_id)
+    else:
+      fp = os.path.join(self.stat_dir, file_id)
+
+    with open(fp, 'wb') as f:
+      np.save(f, times)
+
 
   def _load_training_stats(self):
     file_id = f'{self.id}_plot_stats'

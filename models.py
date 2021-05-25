@@ -1,3 +1,4 @@
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,6 +24,8 @@ class MSDPBase(pl.LightningModule):
     self.training_accuracies = []
     self.validation_accuracies = []
     self.test_accuracy = -1
+
+    self.training_times = []
 
   @property
   def automatic_optimization(self) -> bool:
@@ -63,6 +66,7 @@ class MSDPBase(pl.LightningModule):
       self.personal_log_fn(f"Train epoch {self.current_epoch} - loss: {epoch_loss:.4f}, accuracy: {accuracy:.2f}")
       if hasattr(self, 'privacy_info'):
         self.privacy_info()
+    self.training_times.append(time.time())
 
   def validation_step(self, batch, batch_idx):
     data, targets = batch
@@ -144,10 +148,10 @@ class Cifar10ResNet(MSDPBase):
   def __init__(self, *args):
     super(Cifar10ResNet, self).__init__(args)
     self._NUM_CLASSES = 10
-    self.module = convert_batchnorm_modules(resnet18(num_classes=self._NUM_CLASSES))
+    self.classifier = convert_batchnorm_modules(resnet18(num_classes=self._NUM_CLASSES))
 
   def forward(self, x):
-    return self.module(x).view(-1, self._NUM_CLASSES)
+    return self.classifier(x.float()).view(-1, self._NUM_CLASSES)
 
 
 class MnistCNNNet(MSDPBase):
@@ -179,6 +183,7 @@ class MnistFCNet(MSDPBase):
 
     self._NUM_CLASSES = 10
     self.module = nn.Sequential(
+      nn.Flatten(),
       nn.Linear(28 * 28, 256),
       nn.ReLU(True),
       nn.Linear(256, 128),
@@ -188,7 +193,7 @@ class MnistFCNet(MSDPBase):
     )
 
   def forward(self, x):
-    return self.module(x.view(-1, 28 * 28)).view(-1, self._NUM_CLASSES)
+    return self.module(x.float())
 
 
 class SqueezeNetDR(MSDPBase):

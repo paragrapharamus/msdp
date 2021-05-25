@@ -58,7 +58,7 @@ def model_inversion(model: pl.LightningModule,
                                    input_shape=input_shape,
                                    nb_classes=num_classes)
   # create the attack class
-  attack = MIFace(victim_model, max_iter=100000, threshold=1., batch_size=256)
+  attack = MIFace(victim_model, max_iter=40000, threshold=1., batch_size=256, learning_rate=0.2)
 
   # ids of target data classes
   y = np.arange(num_classes)
