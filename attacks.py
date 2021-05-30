@@ -58,7 +58,7 @@ def model_inversion(model: pl.LightningModule,
                                    input_shape=input_shape,
                                    nb_classes=num_classes)
   # create the attack class
-  attack = MIFace(victim_model, max_iter=40000, threshold=1., batch_size=256, learning_rate=0.2)
+  attack = MIFace(victim_model, max_iter=200000, threshold=1., batch_size=256, learning_rate=0.1)
 
   # ids of target data classes
   y = np.arange(num_classes)
@@ -66,7 +66,7 @@ def model_inversion(model: pl.LightningModule,
 
   x_test, y_test = test_dataset.data.astype(float), test_dataset.targets
 
-  x_init = np.zeros((len(y), *input_shape)) + np.mean(x_test, axis=0)
+  x_init = np.zeros((len(y), *input_shape)) # + np.mean(x_test, axis=0)
   min_over_max_grads = get_min_over_max_class_gradients(x_init, y)
   log(f"Min of max gradients: {min_over_max_grads}", logger)
 

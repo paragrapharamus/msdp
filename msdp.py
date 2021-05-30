@@ -13,6 +13,7 @@ from dp_stages import Stages, Stage1, Stage2, Stage3
 from log import Logger
 import time
 
+
 class MSPDTrainer:
   """
   Multistage differentially private trainer
@@ -241,10 +242,10 @@ class MSPDTrainer:
       np.save(f, training_losses)
       np.save(f, training_accuracies)
       np.save(f, validation_accuracies)
-    self._save_time()
+    # self._save_time()
 
   def _save_time(self):
-    times = self.model.times
+    times = self.model.training_times
     times.insert(0, self.start_time)
     times = np.array(times)
     times -= self.start_time
@@ -256,7 +257,6 @@ class MSPDTrainer:
 
     with open(fp, 'wb') as f:
       np.save(f, times)
-
 
   def _load_training_stats(self):
     file_id = f'{self.id}_plot_stats'

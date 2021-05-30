@@ -331,17 +331,8 @@ def opacus_training_on_cifar10():
 
 @experiment
 def nonprivate_fl_on_cifar10():
-  local = True
-  if local:
-    save_dir = results_dir = 'out/'
-  else:
-    save_dir = '/tmp/va4317/out/'
-    os.makedirs(save_dir, exist_ok=True)
-    results_dir = '/vol/bitbucket/va4317/msdp/out/'
-
   args = ExperimentConfig()
   args.name = "Non-Private on CIFAR10"
-  args.save_dir = save_dir
   args.num_rounds = 10
   args.epochs = 10
   args.stage1 = False
@@ -353,81 +344,41 @@ def nonprivate_fl_on_cifar10():
 
   _train_fl_and_attack(args, model_cls, 'cifar10')
 
-  # # move logs to results_dir if non-local training
-  if not local:
-    file_names = os.listdir(save_dir)
-    for file_name in file_names:
-      move(os.path.join(save_dir, file_name), results_dir)
-    rmtree(save_dir)
-
 
 @experiment
 def msdpfl_on_cifar10():
-  local = True
-  if local:
-    save_dir = results_dir = 'out/'
-  else:
-    save_dir = '/tmp/va4317/out/'
-    os.makedirs(save_dir, exist_ok=True)
-    results_dir = '/vol/bitbucket/va4317/msdp/out/'
-
   args = ExperimentConfig()
   args.name = "MSDPFL on CIFAR10"
-  args.save_dir = save_dir
   args.num_rounds = 10
-  args.epochs = 15
-  args.eps1 = 10
-  args.noise_multiplier = 0.5
-  args.max_grad_norm = 6
-  args.eps3 = 20
-  args.max_weight_norm = 20
-  args.max_weight_norm_aggregated = 20
+  args.epochs = 10
+  args.eps1 = 5
+  args.noise_multiplier = 1.5
+  args.max_grad_norm = 2
+  args.eps3 = 5
+  args.max_weight_norm = 15
+  args.max_weight_norm_aggregated = 15
 
   model_cls = Cifar10Net
 
   _train_fl_and_attack(args, model_cls, 'cifar10')
-
-  # # move logs to results_dir if non-local training
-  if not local:
-    file_names = os.listdir(save_dir)
-    for file_name in file_names:
-      move(os.path.join(save_dir, file_name), results_dir)
-    rmtree(save_dir)
 
 
 @experiment
 def fl_opacus_on_cifar10():
-  local = True
-  if local:
-    save_dir = results_dir = 'out/'
-  else:
-    save_dir = '/tmp/va4317/out/'
-    os.makedirs(save_dir, exist_ok=True)
-    results_dir = '/vol/bitbucket/va4317/msdp/out/'
-
   args = ExperimentConfig()
   args.name = "FL Opacus on CIFAR10"
-  args.save_dir = save_dir
   args.num_rounds = 10
-  args.epochs = 15
+  args.epochs = 10
   args.stage1 = False
   args.stage2 = True
   args.stage3 = False
   args.stage4 = False
-
-  args.noise_multiplier = 0.75
-  args.max_grad_norm = 6
+  args.noise_multiplier = 2
+  args.max_grad_norm = 2
 
   model_cls = Cifar10Net
 
   _train_fl_and_attack(args, model_cls, 'cifar10')
-
-  # move logs to results_dir if non-local training
-  if not local:
-    file_names = os.listdir(save_dir)
-    for file_name in file_names:
-      move(os.path.join(save_dir, file_name), results_dir)
-    rmtree(save_dir)
 
 
 @experiment
@@ -449,13 +400,13 @@ def non_private_training_on_mnist():
 def msdp_training_on_mnist():
   args = ExperimentConfig()
   args.name = f"MSDP on MNIST"
-  args.eps1 = 2
+  args.eps1 = 10
   args.stage1 = False
-  args.noise_multiplier = 1.5
+  args.noise_multiplier = 0.6
   args.max_grad_norm = 2
   args.virtual_batches = 1
   args.eps3 = 2
-  args.max_weight_norm = 10
+  args.max_weight_norm = 20
   args.batch_size = 256
   args.test_batch_size = 1000
   args.epochs = 15
@@ -463,7 +414,7 @@ def msdp_training_on_mnist():
   args.gamma = 0.7
   args.weight_decay = 5e-4
   args.momentum = 0.9
-  model_cls = MnistCNNNet
+  model_cls = MnistFCNet
 
   _train_msdp_and_attack(args, model_cls, 'mnist')
 
@@ -474,7 +425,7 @@ def opacus_training_on_mnist():
   args.name = "Opacus training on MNIST"
   args.batch_size = 256
   args.epochs = 15
-  args.noise_multiplier = 1.5
+  args.noise_multiplier = 0.8
   args.max_grad_norm = 2
   args.lr = 0.02
   args.gamma = 0.7
@@ -513,7 +464,7 @@ def msdpfl_on_mnist():
   args.epochs = 5
   args.eps1 = 10
   args.noise_multiplier = 0.7
-  args.max_grad_norm = 6
+  args.max_grad_norm = 5
   args.eps3 = 10
   args.max_weight_norm = 20
   args.max_weight_norm_aggregated = 20
@@ -530,13 +481,13 @@ def fl_opacus_on_mnist():
   args = ExperimentConfig()
   args.name = "FL Opacus on MNIST"
   args.num_rounds = 10
-  args.epochs = 5
+  args.epochs = 2
   args.stage1 = False
   args.stage2 = True
   args.stage3 = False
   args.stage4 = False
-  args.noise_multiplier = 1.1
-  args.max_grad_norm = 5
+  args.noise_multiplier = 2
+  args.max_grad_norm = 2
   args.num_clients = 10
   args.alpha = 10
   model_cls = MnistCNNNet
@@ -727,11 +678,8 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    # msdp_training_on_cifar10,
-    # opacus_training_on_cifar10
-    non_private_training_on_cifar10,
-    # msdp_training_on_mnist,
-
+    msdpfl_on_cifar10,
+    fl_opacus_on_cifar10,
   ]
 
   for exp in experiments:
@@ -756,7 +704,7 @@ def _get_next_available_dir(root, dir_name, absolute_path=True, create=True):
 def attack_test():
   _set_seed()
   args = ExperimentConfig()
-  model_cls = Cifar10ResNet
+  model_cls = Cifar10Net
   use_cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if use_cuda else "cpu")
 
@@ -765,18 +713,9 @@ def attack_test():
   args.model_inversion = True
   # args.knockoffnet_extraction = True
 
-  args.name = 'msdp_cifar_resnet'
+  args.name = 'msdpfl_cifar'
   attack_model(args, device, 'cifar10', architecture=model_cls,
-               checkpoint_path='out/msdp/final.ckpt')
-
-  args.name = 'np_cifar_resnet'
-  attack_model(args, device, 'cifar10', architecture=model_cls,
-               checkpoint_path='out/np/final.ckpt')
-
-  args.name = 'opacus_cifar_resnet'
-  attack_model(args, device, 'cifar10', architecture=model_cls,
-               checkpoint_path='out/opacus/final.ckpt')
-
+               checkpoint_path='outFL/CIFAR10/msdpfl/final.ckpt')
 
 
 def _plot(data_dict, x_label, y_label, title):
@@ -804,6 +743,7 @@ def _plot(data_dict, x_label, y_label, title):
   plt.ylabel(y_label)
   plt.title(title)
   plt.show()
+  return fig
 
 
 def load_and_plot_privacy_param_variation():
@@ -832,27 +772,31 @@ def load_and_plot_learning_curves():
       metric_data[f['name']] = f[metric_name]
     return metric_data
 
-  metrics = ['training time (s)']#['train_loss', 'train_acc', 'val_acc']
+  metrics = ['train_loss', 'train_acc', 'val_acc']
 
-  msdp = {'name': 'MSDP', 'fp': "out_centralMSDP/CIFAR10/new/msdp/MSDPTrainer_0_plot_stats.npy"}
-  opacus = {'name': 'Opacus', 'fp': "out_centralMSDP/CIFAR10/new/opacus/MSDPTrainer_0_plot_stats.npy"}
-  non_p = {'name': 'Non-Private', 'fp': "out_centralMSDP/CIFAR10/checkpoints_1/MSDPTrainer_0_plot_stats.npy"}
-  title = 'CNN on CIFAR-10'
+  msdp = {'name': 'MSDP $\epsilon<20.91$', 'fp': "out_centralMSDP/CIFAR10/msdp/MSDPTrainer_0_plot_stats.npy"}
+  opacus = {'name': 'Opacus $\epsilon=20.91$', 'fp': "out_centralMSDP/CIFAR10/opacus/MSDPTrainer_0_plot_stats.npy"}
+  non_p = {'name': 'Non-Private', 'fp': "out_centralMSDP/CIFAR10/np/MSDPTrainer_0_plot_stats.npy"}
 
-  files = [msdp, opacus, non_p]
+  msdp2 = {'name': 'MSDP $\epsilon<0.99$', 'fp': "out_centralMSDP/CIFAR10/new/msdp/MSDPTrainer_0_plot_stats.npy"}
+  opacus2 = {'name': 'Opacus $\epsilon=0.99$', 'fp': "out_centralMSDP/CIFAR10/new/opacus/MSDPTrainer_0_plot_stats.npy"}
+
+  title = 'CNN model on CIFAR-10'
+
+  files = [msdp, opacus, non_p, msdp2, opacus2]
 
   for data_file in files:
     data = dict()
     with open(data_file['fp'], 'rb') as f:
       for metric in metrics:
         data[metric] = np.load(f)
-        # if metric in ['train_acc', 'val_acc'] and data_file['name'] != 'Opacus':
-        #   data[metric] = data[metric][1:]
     data_file.update(**data)
 
   for metric in metrics:
     metric_data = fetch(files, metric)
-    _plot(metric_data, 'Epochs', metric, title)
+    f = _plot(metric_data, 'Epochs', metric, title)
+    # if metric == 'val_acc':
+    #   f.savefig(f"./val_acc.png", bbox_inches='tight')
 
 
 def load_and_plot_dr():
@@ -910,5 +854,5 @@ if __name__ == '__main__':
   # load_and_plot_privacy_param_variation()
   # load_and_plot_learning_curves()
   # load_and_plot_dr()
-  # run_experiments()
-  attack_test()
+  run_experiments()
+  # attack_test()

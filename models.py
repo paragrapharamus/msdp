@@ -123,9 +123,8 @@ class MSDPBase(pl.LightningModule):
 class Cifar10Net(MSDPBase):
   def __init__(self, *args):
     super(Cifar10Net, self).__init__(args)
-
     self._NUM_CLASSES = 10
-    self.classifier = nn.Sequential(
+    self.module = nn.Sequential(
       nn.Conv2d(3, 32, kernel_size=3, padding=1),
       nn.ReLU(True),
       nn.MaxPool2d(2),
@@ -141,7 +140,7 @@ class Cifar10Net(MSDPBase):
     )
 
   def forward(self, x):
-    return self.classifier(x.float()).view(-1, self._NUM_CLASSES)
+    return self.module(x.float()).view(-1, self._NUM_CLASSES)
 
 
 class Cifar10ResNet(MSDPBase):

@@ -61,8 +61,8 @@ class ExperimentConfig:
     ##########################
     # Enable Attacks
     ##########################
-    self.membership_inference = False
-    self.model_extraction = False
+    self.membership_inference = True
+    self.model_extraction = True
     self.model_inversion = False
     self.knockoffnet_extraction = False
 
