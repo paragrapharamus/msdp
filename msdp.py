@@ -212,12 +212,16 @@ class MSPDTrainer:
       self.log("Started testing...")
       loader = self.test_loader
 
-      self.model.to(self.device)
-      results = self.trainer.test(self.model, loader)
-      self.model.cpu()
+      results = self.test_on(loader)
       self.log(f"Test results: {results}")
 
       return results
+
+  def test_on(self, loader: DataLoader):
+    self.model.to(self.device)
+    results = self.trainer.test(self.model, loader)
+    self.model.cpu()
+    return results
 
   def train_and_test(self):
     model = self.train()

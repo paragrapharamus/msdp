@@ -129,6 +129,7 @@ class FLEnvironment:
     # Start the FL simulation
     self.log("FL simulation started...")
     self.aggregator.train_and_test()
+
     if args.save_model:
       self.aggregator.save_model(
         os.path.join(args.save_model_path, 'final.ckpt')
@@ -353,4 +354,79 @@ class FLEnvironment:
 
     fig, ax = draw_plot(per_client_distribution, class_names)
     fig.savefig(f"{self.args.save_dir}/clients_class_distributions.png", bbox_inches='tight')
+
+  def cross_client_validation(self, save_path=None):
+    """
+    Evaluates each client's model on the held-out validation sets of all other clients.
+
+    :param save_path: If not None, saves a plot containing the validation results.
+    :return: A matrix of shape (C, C+1), where C is the number of clients. The rows
+            represent the clients and the columns the results on the validation set
+            of the client at column `c`, where `c` in (0, C-1). The last column
+            represents the weighted average of the validation results on all datasets
+            other than the personal validation dataset for each client. The weight is
+            given by the size of the validation dataset of each client.
+    """
+
+    results = np.zeros((self.num_clients, self.num_clients + 1))
+    lens = []
+    done_fetching = False  # if we are done fetching the lengths of the test sets
+    for c in range(len(results)):
+      client = self.clients[c].model_trainer
+
+      # get validation results across clients
+      for cs in range(len(results)):
+        test_set = self.clients[cs].model_trainer.test_loader
+        results[c, cs] = round(client.test_on(test_set)[0]['test_acc'], 3)
+        if not done_fetching:
+          lens.append(len(test_set.dataset))
+      done_fetching = True
+
+    weights = np.array(lens) / sum(lens)
+
+    # compute the weighted average performance of each client's model
+    # over all clients other than itself
+    for c in range(len(results)):
+      l = sum(results[c, :c] * weights[:c])
+      r = sum(results[c, c:-1] * weights[c:])
+      results[c, -1] = round(l + r, 3)
+
+    print(results)
+    fig, ax = plt.subplots()
+    im = ax.imshow(results, cmap='coolwarm')
+
+    cbar = ax.figure.colorbar(im, ax=ax,  cmap="coolwarm")
+    cbar.ax.set_ylabel(ylabel="Accuracy", rotation=-90, va="bottom")
+
+    ax.set_xticks(np.arange(results.shape[1]))
+    ax.set_yticks(np.arange(results.shape[0]))
+    ax.set_xticklabels(list(range(results.shape[1] - 1)) + ['AVG'])
+    ax.set_yticklabels(list(range(results.shape[0])))
+
+    # Let the horizontal axes labeling appear on top.
+    ax.tick_params(top=True, bottom=False,
+                   labeltop=True, labelbottom=False)
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=0, ha="right",
+             rotation_mode="anchor")
+
+    # Turn spines off and create white grid.
+    # ax.spines[:].set_visible(False)
+
+    ax.set_xticks(np.arange(results.shape[1] + 1) - .5, minor=True)
+    ax.set_yticks(np.arange(results.shape[0] + 1) - .5, minor=True)
+    ax.grid(which="minor", color="w", linestyle='-', linewidth=3)
+    ax.tick_params(which="minor", bottom=False, left=False)
+
+    for i in range(results.shape[0]):
+      for j in range(results.shape[1]):
+        text = ax.text(j, i, results[i, j],
+                       ha="center", va="center", color="w")
+    fig.tight_layout()
+
+    if save_path:
+      plt.savefig(save_path, bbox_inches='tight')
+
+    plt.show()
 

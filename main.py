@@ -211,6 +211,8 @@ def _train_fl_and_attack(args, model_cls, dataset_name):
                                alpha=args.alpha,
                                args=args)
 
+  fl_simulator.cross_client_validation()
+
   model = fl_simulator.get_model()
 
   attack_results = attack_model(args, device, dataset_name, model_cls,
@@ -675,8 +677,7 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    msdpfl_on_mnist,
-    fl_opacus_on_mnist,
+    nonprivate_fl_on_mnist
   ]
 
   for exp in experiments:
@@ -705,5 +706,5 @@ if __name__ == '__main__':
   # load_and_plot_privacy_param_variation()
   # load_and_plot_learning_curves()
   # load_and_plot_dr()
-  # run_experiments()
-  attack_test()
+  run_experiments()
+  # attack_test()
