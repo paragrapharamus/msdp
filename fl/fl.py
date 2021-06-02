@@ -86,8 +86,9 @@ class FLEnvironment:
     self.logger.log(str(args))
 
     # Allocate data for each client and ge the global val/test splits
-    training_data_splits, val_dataset = self._split_dataset(train_dataset,
-                                                            partition_method)
+    (training_data_splits,
+     val_dataset,
+     num_classes) = self._split_dataset(train_dataset, partition_method)
 
     # Build the global test dataloader
     self.use_cuda = not args.no_cuda and torch.cuda.is_available()
@@ -105,6 +106,7 @@ class FLEnvironment:
                                                        client_optimizer_class,
                                                        training_data_splits,
                                                        client_local_test_split,
+                                                       num_classes,
                                                        train_kwargs,
                                                        test_kwargs)
     clients_per_round = clients_per_round if clients_per_round > 0 else len(self.clients)
@@ -148,6 +150,7 @@ class FLEnvironment:
                     optimizer_class: torch.optim,
                     training_data_splits: Dict[int, Dataset],
                     client_local_test_split: bool,
+                    num_classes: int,
                     train_kwargs: dict,
                     test_kwargs: dict) -> Tuple[List[Client], int]:
     """
@@ -157,6 +160,7 @@ class FLEnvironment:
     :param optimizer_class: The optimizer class used to optimize the client's model
     :param training_data_splits:
     :param client_local_test_split:
+    :param num_classes:
     :param train_kwargs:
     :param test_kwargs:
     :return: The list of clients and the total number of training datapoints
@@ -171,7 +175,7 @@ class FLEnvironment:
       client_dataset = training_data_splits[client_id]
 
       present_classes = np.unique(client_dataset.targets)
-      class_distribution = np.bincount(client_dataset.targets)
+      class_distribution = np.bincount(client_dataset.targets, minlength=num_classes)
       client_class_distributions[client_id] = (present_classes, class_distribution)
 
       # Generate local test splits
@@ -213,7 +217,7 @@ class FLEnvironment:
   def _split_dataset(self,
                      train_dataset: Dataset,
                      partition_method: str
-                     ) -> Tuple[Dict[int, Dataset], Dataset]:
+                     ) -> Tuple[Dict[int, Dataset], Dataset, int]:
     """
     Fetches and splits the training dataset foe each client
 
@@ -223,10 +227,10 @@ class FLEnvironment:
              * the validation data split
     """
     (train_dataset, val_dataset,
-     allocation, _) = self._allocate_data(train_dataset,
-                                          self.num_clients,
-                                          partition_method=partition_method,
-                                          alpha=self.alpha)
+     allocation, num_classes) = self._allocate_data(train_dataset,
+                                                    self.num_clients,
+                                                    partition_method=partition_method,
+                                                    alpha=self.alpha)
     splits = {}
     self.log('Building client datasets...')
     for split_id in range(self.num_clients):
@@ -235,7 +239,7 @@ class FLEnvironment:
       ds.targets = ds.targets[allocation[split_id]]
       splits[split_id] = ds
 
-    return splits, val_dataset
+    return splits, val_dataset, num_classes
 
   def _allocate_data(self,
                      train_dataset: Dataset,
@@ -308,6 +312,14 @@ class FLEnvironment:
       client_class_distributions: Dict[int, Tuple[np.ndarray, np.ndarray]],
       class_names: List[str]
   ):
+    """
+    Plots the class distribution for each client
+
+    :param client_class_distributions: dictionary: client_id ->
+                          (present_classes, num_of_examples_per_class)
+    :param class_names: a list of class names
+    :return: the plot
+    """
 
     def draw_plot(per_client_distribution, class_names):
       """
@@ -343,14 +355,11 @@ class FLEnvironment:
 
       return fig, ax
 
-    total_num_classes = len(class_names)
     per_client_distribution = dict()
 
     for client, (present_cls, client_cls_distr) in client_class_distributions.items():
       k = f'Client {client}'
-      per_client_distribution[k] = [0] * total_num_classes
-      for i in range(len(present_cls)):
-        per_client_distribution[k][present_cls[i]] = client_cls_distr[i]
+      per_client_distribution[k] = list(client_cls_distr)
 
     fig, ax = draw_plot(per_client_distribution, class_names)
     fig.savefig(f"{self.args.save_dir}/clients_class_distributions.png", bbox_inches='tight')
@@ -377,7 +386,7 @@ class FLEnvironment:
       # get validation results across clients
       for cs in range(len(results)):
         test_set = self.clients[cs].model_trainer.test_loader
-        results[c, cs] = round(client.test_on(test_set)[0]['test_acc'], 3)
+        results[c, cs] = round(client.test_on(test_set)[0]['test_acc'], 2)
         if not done_fetching:
           lens.append(len(test_set.dataset))
       done_fetching = True
@@ -389,13 +398,13 @@ class FLEnvironment:
     for c in range(len(results)):
       l = sum(results[c, :c] * weights[:c])
       r = sum(results[c, c:-1] * weights[c:])
-      results[c, -1] = round(l + r, 3)
+      results[c, -1] = round(l + r, 2)
 
     print(results)
     fig, ax = plt.subplots()
     im = ax.imshow(results, cmap='coolwarm')
 
-    cbar = ax.figure.colorbar(im, ax=ax,  cmap="coolwarm")
+    cbar = ax.figure.colorbar(im, ax=ax, cmap="coolwarm")
     cbar.ax.set_ylabel(ylabel="Accuracy", rotation=-90, va="bottom")
 
     ax.set_xticks(np.arange(results.shape[1]))
@@ -429,4 +438,3 @@ class FLEnvironment:
       plt.savefig(save_path, bbox_inches='tight')
 
     plt.show()
-

@@ -211,7 +211,7 @@ def _train_fl_and_attack(args, model_cls, dataset_name):
                                alpha=args.alpha,
                                args=args)
 
-  fl_simulator.cross_client_validation()
+  fl_simulator.cross_client_validation(os.path.join(args.save_model_path, 'val_heatmap.png'))
 
   model = fl_simulator.get_model()
 
@@ -332,13 +332,14 @@ def opacus_training_on_cifar10():
 def nonprivate_fl_on_cifar10():
   args = ExperimentConfig()
   args.name = "Non-Private on CIFAR10"
-  args.num_rounds = 10
-  args.epochs = 10
+  args.num_rounds = 15
+  args.epochs = 5
   args.stage1 = False
   args.stage2 = False
   args.stage3 = False
   args.stage4 = False
-
+  args.clients_per_round = 3
+  args.alpha = 0.1
   model_cls = Cifar10Net
 
   _train_fl_and_attack(args, model_cls, 'cifar10')
@@ -348,14 +349,16 @@ def nonprivate_fl_on_cifar10():
 def msdpfl_on_cifar10():
   args = ExperimentConfig()
   args.name = "MSDPFL on CIFAR10"
-  args.num_rounds = 10
-  args.epochs = 10
+  args.num_rounds = 15
+  args.epochs = 5
   args.eps1 = 5
   args.noise_multiplier = 1.5
   args.max_grad_norm = 2
   args.eps3 = 5
   args.max_weight_norm = 15
   args.max_weight_norm_aggregated = 15
+  args.clients_per_round = 5
+  args.alpha = 0.3
 
   model_cls = Cifar10Net
 
@@ -366,14 +369,16 @@ def msdpfl_on_cifar10():
 def fl_opacus_on_cifar10():
   args = ExperimentConfig()
   args.name = "FL Opacus on CIFAR10"
-  args.num_rounds = 10
-  args.epochs = 10
+  args.num_rounds = 15
+  args.epochs = 5
   args.stage1 = False
   args.stage2 = True
   args.stage3 = False
   args.stage4 = False
   args.noise_multiplier = 2
   args.max_grad_norm = 2
+  args.clients_per_round = 5
+  args.alpha = 0.3
 
   model_cls = Cifar10Net
 
@@ -442,14 +447,15 @@ def opacus_training_on_mnist():
 def nonprivate_fl_on_mnist():
   args = ExperimentConfig()
   args.name = "Non-Private on MNIST"
-  args.num_rounds = 10
-  args.epochs = 5
+  args.num_rounds = 20
+  args.epochs = 3
   args.stage1 = False
   args.stage2 = False
   args.stage3 = False
   args.stage4 = False
   args.num_clients = 10
-  args.alpha = 10
+  args.clients_per_round = 5
+  args.alpha = 0.2
   model_cls = MnistCNNNet
 
   _train_fl_and_attack(args, model_cls, 'mnist')
@@ -460,7 +466,7 @@ def msdpfl_on_mnist():
   args = ExperimentConfig()
   args.name = "MSDPFL on CIFAR10"
   args.num_rounds = 10
-  args.epochs = 5
+  args.epochs = 3
   args.eps1 = 5
   args.noise_multiplier = 1.5
   args.max_grad_norm = 2
@@ -468,7 +474,8 @@ def msdpfl_on_mnist():
   args.max_weight_norm = 15
   args.max_weight_norm_aggregated = 15
   args.num_clients = 10
-  args.alpha = 10
+  args.clients_per_round = 5
+  args.alpha = 0.2
 
   model_cls = MnistCNNNet
 
@@ -479,8 +486,8 @@ def msdpfl_on_mnist():
 def fl_opacus_on_mnist():
   args = ExperimentConfig()
   args.name = "FL Opacus on MNIST"
-  args.num_rounds = 10
-  args.epochs = 5
+  args.num_rounds = 20
+  args.epochs = 3
   args.stage1 = False
   args.stage2 = True
   args.stage3 = False
@@ -488,7 +495,8 @@ def fl_opacus_on_mnist():
   args.noise_multiplier = 2.5
   args.max_grad_norm = 2
   args.num_clients = 10
-  args.alpha = 10
+  args.clients_per_round = 5
+  args.alpha = 0.2
   model_cls = MnistCNNNet
 
   _train_fl_and_attack(args, model_cls, 'mnist')
@@ -677,7 +685,9 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    nonprivate_fl_on_mnist
+    nonprivate_fl_on_cifar10,
+    fl_opacus_on_cifar10,
+    msdpfl_on_cifar10
   ]
 
   for exp in experiments:
