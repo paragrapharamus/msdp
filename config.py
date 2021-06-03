@@ -57,6 +57,7 @@ class ExperimentConfig:
     self.alpha = 50
     self.client_local_test_split = 0.1
     self.experiment_id = None
+    self.cross_client_validation = True
 
     ##########################
     # Enable Attacks

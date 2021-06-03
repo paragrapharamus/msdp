@@ -318,10 +318,13 @@ class Stage4(DPStage):
     beta = - np.log(1 - 1 / cs +
                  np.exp(-self.eps / (max_exposure * np.sqrt(selected_clients))) / cs)
     if rounds <= self.eps / beta:
-      return 1e-4
+      return 0
     else:
       c = np.sqrt(2 * np.log(1.25 / delta))
-      nom = 2 * c * self.max_weight_norm * \
+      max_weight_norm = self.max_weight_norm
+      if isinstance(self.max_weight_norm, list):
+        max_weight_norm = sum(self.max_weight_norm) / len(self.max_weight_norm)
+      nom = 2 * c * max_weight_norm * \
             np.sqrt((rounds ** 2) / (alpha ** 2) - selected_clients * max_exposure ** 2)
       return nom / (min_client_dataset_size * selected_clients * self.eps)
 
@@ -337,7 +340,8 @@ class Stage4(DPStage):
     delta = 1 / (1.5 * training_dataset_size)
     std = self._get_std(rounds, clients, selected_clients,
                         min_client_dataset_size, max_exposure, delta)
-    self.log(f"Stage IV perturbation: ({self.eps:.2f}, {delta:.2e})-DP with std={std:.2e}")
+    if std > 0:
+      self.log(f"Stage IV perturbation: ({self.eps:.2f}, {delta:.2e})-DP with std={std:.2e}")
 
     # Sanitize the model's parameters to ensure privacy
     for i, p in enumerate(model.parameters()):
@@ -349,6 +353,7 @@ class Stage4(DPStage):
       # Clip the weights to a maximum l2 norm
       p.data /= max(1, torch.norm(p.data) / clip_val)
       # Inject noise to the weights
-      noise = torch.normal(mean=0, std=std, size=p.shape).to(p.data.device)
-      p.data.add_(noise)
+      if std > 0:
+        noise = torch.normal(mean=0, std=std, size=p.shape).to(p.data.device)
+        p.data.add_(noise)
     return model

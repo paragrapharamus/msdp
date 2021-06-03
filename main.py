@@ -19,7 +19,7 @@ from dp_stages import Stages
 from fl.aggregator import Aggregator
 from fl.fl import FLEnvironment
 from log import Logger
-from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR, MnistClassifierCNN, Cifar10Classifier
+from models import Cifar10Net, MnistCNNNet, MnistFCNet, SqueezeNetDR, MnistClassifierCNN, Cifar10Classifier, Cifar10ResNet
 from msdp import MSPDTrainer
 from utils import *
 
@@ -211,7 +211,8 @@ def _train_fl_and_attack(args, model_cls, dataset_name):
                                alpha=args.alpha,
                                args=args)
 
-  fl_simulator.cross_client_validation(os.path.join(args.save_model_path, 'val_heatmap.png'))
+  if args.cross_client_validation:
+    fl_simulator.cross_client_validation(os.path.join(args.save_model_path, 'val_heatmap.png'))
 
   model = fl_simulator.get_model()
 
@@ -465,7 +466,7 @@ def nonprivate_fl_on_mnist():
 def msdpfl_on_mnist():
   args = ExperimentConfig()
   args.name = "MSDPFL on CIFAR10"
-  args.num_rounds = 10
+  args.num_rounds = 20
   args.epochs = 3
   args.eps1 = 5
   args.noise_multiplier = 1.5
@@ -685,9 +686,9 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    nonprivate_fl_on_cifar10,
-    fl_opacus_on_cifar10,
-    msdpfl_on_cifar10
+    # nonprivate_fl_on_mnist,
+    # fl_opacus_on_mnist,
+    msdpfl_on_mnist
   ]
 
   for exp in experiments:

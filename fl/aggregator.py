@@ -58,15 +58,20 @@ class Aggregator:
     self.rounds = rounds
     self.device = device
     self.logger = logger
+    self.val_accuracies = []
+
+    # Simulates the client selection in advance to be able to
+    # properly apply DP if `epsilon` is not None
+    self.round_assignments = self._simulate_round_assignments()
 
     self.dp_stage = None
     if epsilon:
       self.dp_stage = Stage4(epsilon, max_weight_norm)
       self.dp_stage.add_logger(logger, 'Aggregator')
-      self.max_exposures = 0
-      self.min_client_dataset = total_training_data_size
-
-    self.val_accuracies = []
+      self.max_exposures = self._get_max_exposures()
+      self.min_client_dataset = self._get_min_dataset_size()
+      for c in self.clients:
+        c.set_exposures(self.max_exposures)
 
   def train_and_test(self):
     self.train()
@@ -79,11 +84,6 @@ class Aggregator:
     for r in range(self.rounds):
       self.log(f'******** ROUND {r + 1} ********')
 
-      if self.dp_stage:
-        # Reset the values, to be properly assigned during aggregation
-        self.max_exposures = 0
-        self.min_client_dataset = self.total_training_data_size
-
       self._select_clients(r)
       self._send_model_and_train()
       self._aggregate_models()
@@ -95,7 +95,7 @@ class Aggregator:
         self.dp_stage.apply(self.model, self.rounds,
                             len(self.clients), self.clients_per_round,
                             self.min_client_dataset, self.max_exposures,
-                            self.curr_round_training_dataset_size)
+                            self.total_training_data_size)
 
         self.log("Post DP validation results... ")
         self.test(self.val_dataloader)
@@ -129,11 +129,6 @@ class Aggregator:
       client_contribution_weight = client.training_data_size / \
                                    self.curr_round_training_dataset_size
 
-      if self.dp_stage:
-        self.max_exposures = max(self.max_exposures, client.exposures)
-        self.min_client_dataset = min(self.min_client_dataset,
-                                      client.training_data_size)
-
       global_model_params = self.model.named_parameters()
       dict_global_model_params = dict(global_model_params)
 
@@ -150,17 +145,39 @@ class Aggregator:
       global_model_contribution_weight = 1
 
   def _select_clients(self, current_round):
-    np.random.seed(current_round)
-    client_indices = np.random.choice(range(len(self.clients)),
-                                      self.clients_per_round,
-                                      replace=False)
-    self.current_round_clients = []
     current_training_data = 0
-    for ci in client_indices:
+    self.current_round_clients = []
+    for ci in self.round_assignments[current_round]:
       self.current_round_clients.append(self.clients[ci])
       current_training_data += self.clients[ci].training_data_size
     self.curr_round_training_dataset_size = current_training_data
     return self.current_round_clients
+
+  def _simulate_round_assignments(self):
+    round_assignments = []
+    for r in range(self.rounds):
+      np.random.seed(r)
+      # select the clients for each round
+      client_indices = np.random.choice(range(len(self.clients)),
+                                        self.clients_per_round,
+                                        replace=False)
+      round_assignments.append(client_indices)
+    return round_assignments
+
+  def _get_max_exposures(self):
+    exposures = np.zeros(len(self.clients))
+    for clients_ids in self.round_assignments:
+      exposures += np.bincount(clients_ids, minlength=len(self.clients))
+    return int(max(exposures))
+
+  def _get_min_dataset_size(self):
+    client_dataset_size = dict()
+    for clients_ids in self.round_assignments:
+      for client_id in clients_ids:
+        if not client_id in client_dataset_size:
+          client_dataset_size[client_id] = \
+            self.clients[client_id].training_data_size
+    return int(min(client_dataset_size.values()))
 
   def log(self, *msg):
     if self.logger:

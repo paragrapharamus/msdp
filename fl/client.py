@@ -101,11 +101,16 @@ class Client:
                                                        'max_weight_norm': max_weight_norm})
 
     # The number of times the clients took part in aggregation
-    self.exposures = 0
+    self.max_exposures = 0
+
+  def __repr__(self):
+    return f"Client {self.id}"
+
+  def __str__(self):
+    return self.__repr__()
 
   # noinspection PyArgumentList
   def update_model(self, parameters):
-    self.exposures += 1
     model_params = list(self.model_trainer.model.parameters())
     for i, param in enumerate(parameters):
       model_params[i].data.copy_(param.data)
@@ -118,12 +123,15 @@ class Client:
                                        weight_decay=self.weight_decay)
     self.model_trainer.update_optimizer(optimizer)
 
+  def set_exposures(self, exposures):
+    self.max_exposures = exposures
+
   def get_model_params(self):
     return self.model_trainer.model.named_parameters()
 
   def train(self):
     if Stages.STAGE_3 in self.model_trainer.stages:
-      self.model_trainer.stages[Stages.STAGE_3].set_exposures(self.exposures)
+      self.model_trainer.stages[Stages.STAGE_3].set_exposures(self.max_exposures)
     self.model_trainer.train()
 
   def test(self):
