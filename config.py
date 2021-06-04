@@ -39,12 +39,9 @@ class ExperimentConfig:
     self.max_grad_norm = 5
     self.virtual_batches = 1
 
-    # Stage 3
+    # Stage 3 & 4
     self.eps3 = 1
     self.max_weight_norm = 20
-
-    # Stage 4
-    self.max_weight_norm_aggregated = 20
 
     ##########################
     # FL arguments

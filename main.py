@@ -350,16 +350,15 @@ def nonprivate_fl_on_cifar10():
 def msdpfl_on_cifar10():
   args = ExperimentConfig()
   args.name = "MSDPFL on CIFAR10"
-  args.num_rounds = 15
-  args.epochs = 5
+  args.num_rounds = 10
+  args.epochs = 10
   args.eps1 = 5
   args.noise_multiplier = 1.5
   args.max_grad_norm = 2
-  args.eps3 = 5
-  args.max_weight_norm = 15
-  args.max_weight_norm_aggregated = 15
+  args.eps3 = 15
+  args.max_weight_norm = 12
   args.clients_per_round = 5
-  args.alpha = 0.3
+  args.alpha = 50
 
   model_cls = Cifar10Net
 
@@ -465,15 +464,14 @@ def nonprivate_fl_on_mnist():
 @experiment
 def msdpfl_on_mnist():
   args = ExperimentConfig()
-  args.name = "MSDPFL on CIFAR10"
-  args.num_rounds = 20
-  args.epochs = 3
-  args.eps1 = 5
-  args.noise_multiplier = 1.5
-  args.max_grad_norm = 2
-  args.eps3 = 5
-  args.max_weight_norm = 15
-  args.max_weight_norm_aggregated = 15
+  args.name = "MSDPFL on MNIST"
+  args.num_rounds = 10
+  args.epochs = 5
+  args.eps1 = 10
+  args.noise_multiplier = 0.7
+  args.max_grad_norm = 6
+  args.eps3 = 10
+  args.max_weight_norm = 11
   args.num_clients = 10
   args.clients_per_round = 5
   args.alpha = 0.2
@@ -514,7 +512,6 @@ def msdpfl_on_cifar_client_variation():
   args.max_grad_norm = 6
   args.eps3 = 20
   args.max_weight_norm = 20
-  args.max_weight_norm_aggregated = 20
   args.alpha = 50
   model_cls = Cifar10Net
 
@@ -688,7 +685,7 @@ def run_experiments():
   experiments = [
     # nonprivate_fl_on_mnist,
     # fl_opacus_on_mnist,
-    msdpfl_on_mnist
+    msdpfl_on_cifar10
   ]
 
   for exp in experiments:

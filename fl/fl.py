@@ -124,7 +124,7 @@ class FLEnvironment:
                                        total_training_data_size=n_training_data,
                                        rounds=rounds,
                                        epsilon=eps,
-                                       max_weight_norm=args.max_weight_norm_aggregated,
+                                       max_weight_norm=args.max_weight_norm,
                                        device=device,
                                        logger=self.logger)
 

@@ -65,8 +65,9 @@ class Stages(Enum):
       * `eps: float`
           Quantifies the degree of privacy added during this stage, 
           hence the amount of noise which will be injected into the weights.
+          Should be the same value used for Stage 3.
       * max_weight_norm: 
-          The maximum L2 norm to which the weights will be clipped.
+          The maximum L2 norm to which the weights were clipped in Stage 3.
           Could be a single real value, to which all weights will be
           clipped or a list of maximum norms per layer
   """
@@ -290,8 +291,9 @@ class Stage4(DPStage):
     :param eps:  float`
           Quantifies the degree of privacy added during this stage,
           hence the amount of noise which will be injected into the weights.
+          Should be the same value used for Stage 3.
     :param max_weight_norm: Union[float, List[float]]
-          The maximum L2 norm to which the weights will be clipped.
+          The maximum L2 norm to which the weights were clipped in Stage3.
           Could be a single real value, to which all weights will be
           clipped or a list of maximum norms per layer
   """
@@ -340,20 +342,12 @@ class Stage4(DPStage):
     delta = 1 / (1.5 * training_dataset_size)
     std = self._get_std(rounds, clients, selected_clients,
                         min_client_dataset_size, max_exposure, delta)
+    # Sanitize the model's parameters to ensure privacy
     if std > 0:
       self.log(f"Stage IV perturbation: ({self.eps:.2f}, {delta:.2e})-DP with std={std:.2e}")
 
-    # Sanitize the model's parameters to ensure privacy
-    for i, p in enumerate(model.parameters()):
-      if isinstance(self.max_weight_norm, list):
-        clip_val = self.max_weight_norm[i]
-      else:
-        clip_val = self.max_weight_norm
-
-      # Clip the weights to a maximum l2 norm
-      p.data /= max(1, torch.norm(p.data) / clip_val)
-      # Inject noise to the weights
-      if std > 0:
-        noise = torch.normal(mean=0, std=std, size=p.shape).to(p.data.device)
-        p.data.add_(noise)
+      for i, p in enumerate(model.parameters()):
+        # Inject noise to the weights
+          noise = torch.normal(mean=0, std=std, size=p.shape).to(p.data.device)
+          p.data.add_(noise)
     return model
