@@ -333,7 +333,7 @@ class FLEnvironment:
       category_colors = plt.get_cmap('tab20c')(
         np.linspace(0.15, 0.85, data.shape[1]))
 
-      fig, ax = plt.subplots(figsize=(11, 5))
+      fig, ax = plt.subplots(figsize=(5, 5))
       ax.invert_yaxis()
       ax.xaxis.set_visible(False)
       ax.set_xlim(0, np.sum(data, axis=1).max())
@@ -436,5 +436,3 @@ class FLEnvironment:
 
     if save_path:
       plt.savefig(save_path, bbox_inches='tight')
-
-    plt.show()

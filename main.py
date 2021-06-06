@@ -465,17 +465,16 @@ def nonprivate_fl_on_mnist():
 def msdpfl_on_mnist():
   args = ExperimentConfig()
   args.name = "MSDPFL on MNIST"
-  args.num_rounds = 10
-  args.epochs = 5
-  args.eps1 = 10
-  args.noise_multiplier = 0.7
-  args.max_grad_norm = 6
-  args.eps3 = 10
+  args.num_rounds = 20
+  args.epochs = 3
+  args.eps1 = 5
+  args.noise_multiplier = 1.5
+  args.max_grad_norm = 2
+  args.eps3 = 20
   args.max_weight_norm = 11
   args.num_clients = 10
   args.clients_per_round = 5
   args.alpha = 0.2
-
   model_cls = MnistCNNNet
 
   _train_fl_and_attack(args, model_cls, 'mnist')
@@ -685,7 +684,7 @@ def run_experiments():
   experiments = [
     # nonprivate_fl_on_mnist,
     # fl_opacus_on_mnist,
-    msdpfl_on_cifar10
+    msdpfl_on_mnist
   ]
 
   for exp in experiments:
