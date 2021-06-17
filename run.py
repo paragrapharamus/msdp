@@ -692,26 +692,29 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    non_private_training_on_dr,
-    nonprivate_fl_training_on_dr,
-    opacus_training_on_dr,
-    opacus_fl_training_on_dr,
-    msdp_training_on_dr,
-    msdpfl_training_on_dr,
-    non_private_training_on_mnist,
-    nonprivate_fl_on_mnist,
-    opacus_training_on_mnist,
-    fl_opacus_on_mnist,
-    msdp_training_on_mnist,
-    msdpfl_on_mnist,
     non_private_training_on_cifar10,
     nonprivate_fl_on_cifar10,
     opacus_training_on_cifar10,
     fl_opacus_on_cifar10,
     msdp_training_on_cifar10,
     msdpfl_on_cifar10,
+
+    non_private_training_on_mnist,
+    nonprivate_fl_on_mnist,
+    opacus_training_on_mnist,
+    fl_opacus_on_mnist,
+    msdp_training_on_mnist,
+    msdpfl_on_mnist,
+
+    non_private_training_on_dr,
+    nonprivate_fl_training_on_dr,
+    opacus_training_on_dr,
+    opacus_fl_training_on_dr,
+    msdp_training_on_dr,
+    msdpfl_training_on_dr,
+
     msdpfl_on_cifar_client_variation,
-    msdp_stage_effect_on_cifar10
+    msdp_stage_effect_on_cifar10,
   ]
 
   for exp in experiments:

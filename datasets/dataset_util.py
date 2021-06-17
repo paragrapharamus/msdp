@@ -6,8 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-from matplotlib import image as mpimg
-from torch.utils.data import DataLoader, sampler, Dataset
+from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets
 from torchvision import transforms
 
@@ -209,7 +208,10 @@ def get_mnist_dataset(validation_dataset=True):
 
 
 def get_dr_dataset(validation_dataset=True):
-  return _get_dataset(DRDataset, validation_dataset)
+  try:
+    return _get_dataset(DRDataset, validation_dataset)
+  except:
+    raise Exception("DR dataset not found. Please check the README file for downloading instructions")
 
 
 def truncate_dataset(ds: Dataset, idxs: np.ndarray):
