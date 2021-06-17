@@ -5,7 +5,6 @@ import warnings
 import pytorch_lightning as pl
 import torch.optim
 from torch import nn
-from matplotlib import pyplot as plt
 
 from attacks import (model_extraction,
                      membership_inference_black_box,
@@ -47,6 +46,10 @@ def attack_model(args: ExperimentConfig,
                  checkpoint_path: str = None,
                  logger: Logger = None,
                  include_val_split=True):
+  """
+    Runs the attacks specified on the configuration for the given model
+  """
+
   if not model:
     model = architecture.load_from_checkpoint(checkpoint_path)
   model = model.to(device)
@@ -61,18 +64,23 @@ def attack_model(args: ExperimentConfig,
 
   if args.membership_inference:
     _set_seed()
-    acc, p, r = membership_inference_black_box(model=model,
-                                               loss=nn.CrossEntropyLoss(),
-                                               optimizer_class=torch.optim.Adam,
-                                               train_dataset=train_dataset,
-                                               test_dataset=test_dataset,
-                                               input_shape=train_dataset.input_shape,
-                                               num_classes=train_dataset.num_classes,
-                                               attack_train_size=5000,
-                                               attack_test_size=5000,
-                                               logger=logger
-                                               )
-    attack_results['MIA'] = {'accuracy': acc, 'precision': p, 'recall': r}
+    a, p, r = 0, 0, 0
+    for _ in range(args.runs):
+      acc, prec, rec = membership_inference_black_box(model=model,
+                                                      loss=nn.CrossEntropyLoss(),
+                                                      optimizer_class=torch.optim.Adam,
+                                                      train_dataset=train_dataset,
+                                                      test_dataset=test_dataset,
+                                                      input_shape=train_dataset.input_shape,
+                                                      num_classes=train_dataset.num_classes,
+                                                      attack_train_size=5000,
+                                                      attack_test_size=5000,
+                                                      logger=logger
+                                                      )
+      a += acc
+      p += prec
+      r += rec
+    attack_results['MIA'] = {'accuracy': a / args.runs, 'precision': p / args.runs, 'recall': r / args.runs}
 
   if args.model_extraction:
     _set_seed()
@@ -97,19 +105,21 @@ def attack_model(args: ExperimentConfig,
 
   if args.knockoffnet_extraction:
     _set_seed()
-    fidelity = model_extraction_knockoffnets(model=model,
-                                             attack_model_cls=architecture,
-                                             loss=nn.CrossEntropyLoss(),
-                                             optimizer_class=torch.optim.Adam,
-                                             input_shape=train_dataset.input_shape,
-                                             num_classes=train_dataset.num_classes,
-                                             test_dataset=test_dataset,
-                                             batch_size=args.batch_size,
-                                             epochs=25,
-                                             query_limit=9000,
-                                             logger=logger
-                                             )
-    attack_results['MEA_KnockOffNet'] = {'fidelity': fidelity}
+    fidelity = 0
+    for _ in range(args.runs):
+      fidelity += model_extraction_knockoffnets(model=model,
+                                                attack_model_cls=architecture,
+                                                loss=nn.CrossEntropyLoss(),
+                                                optimizer_class=torch.optim.Adam,
+                                                input_shape=train_dataset.input_shape,
+                                                num_classes=train_dataset.num_classes,
+                                                test_dataset=test_dataset,
+                                                batch_size=args.batch_size,
+                                                epochs=25,
+                                                query_limit=9000,
+                                                logger=logger
+                                                )
+    attack_results['MEA_KnockOffNet'] = {'fidelity': fidelity / args.runs}
 
   if args.model_inversion:
     _set_seed()
@@ -682,9 +692,26 @@ def opacus_fl_training_on_dr():
 
 def run_experiments():
   experiments = [
-    # nonprivate_fl_on_mnist,
-    # fl_opacus_on_mnist,
-    msdpfl_on_mnist
+    non_private_training_on_dr,
+    nonprivate_fl_training_on_dr,
+    opacus_training_on_dr,
+    opacus_fl_training_on_dr,
+    msdp_training_on_dr,
+    msdpfl_training_on_dr,
+    non_private_training_on_mnist,
+    nonprivate_fl_on_mnist,
+    opacus_training_on_mnist,
+    fl_opacus_on_mnist,
+    msdp_training_on_mnist,
+    msdpfl_on_mnist,
+    non_private_training_on_cifar10,
+    nonprivate_fl_on_cifar10,
+    opacus_training_on_cifar10,
+    fl_opacus_on_cifar10,
+    msdp_training_on_cifar10,
+    msdpfl_on_cifar10,
+    msdpfl_on_cifar_client_variation,
+    msdp_stage_effect_on_cifar10
   ]
 
   for exp in experiments:
@@ -710,8 +737,4 @@ def attack_test():
 
 if __name__ == '__main__':
   warnings.filterwarnings("ignore")
-  # load_and_plot_privacy_param_variation()
-  # load_and_plot_learning_curves()
-  # load_and_plot_dr()
   run_experiments()
-  # attack_test()

@@ -4,7 +4,7 @@ import torch.optim
 class ExperimentConfig:
   def __init__(self):
     self.name = None
-    self.runs = 3
+    self.runs = 5
     ##########################
     # Client training
     ##########################

@@ -11,5 +11,5 @@ TERM=vt100 # or TERM=xterm
 /usr/bin/nvidia-smi
 uptime
 
-nohup python -u main.py > out/exp.log 2>&1
+nohup python -u run.py > out/exp.log 2>&1
 
