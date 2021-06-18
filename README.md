@@ -20,6 +20,8 @@ data, the gradients and the parameters of the model.
 To use this library we first recommend using Python 3.8 or above. For installing the required libraries, install the packages 
 from the ``requirements.txt`` file.
 
+To run the DR (Diabetic Retinopathy) experiments please download the [training data](https://www.kaggle.com/c/aptos2019-blindness-detection) (3662 images), randomly split it into training data (3292 images) and test data (366) images. The validation set is automatically created from the training data split (default to 366 images). The data should be placed under `../data/diabetic_retinopathy`. This directory should contain a subdirectory named `images` that contain the images and two `cvs` files, `train.csv` and `test.csv` that contain the name of the image and its label. Please check the `DRDataset` class for more details.
+
 ## Basic usage
 
 For examples of usage, please check the `run.py` file that also can be used to replicate our experiments, but bear in mind that 
